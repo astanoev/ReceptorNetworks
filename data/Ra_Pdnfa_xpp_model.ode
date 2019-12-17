@@ -1,0 +1,50 @@
+# Ra-Pdnfa model for xpp bifurcation analysis
+
+# To perform bifurcation analysis as in Fig.1b - set parameter regime 'zero'(File -> Get par set -> zero; gamma_dnf=0) and higher initial conditions (Ra=0.5) and run xpp, integrate (Initialconds -> Go), import steady state (Sing pts -> Go -> Import) and start xppauto (File -> Auto) to run bifurcation analysis (Run -> Steady state). 
+
+# To run two-parameter bifurcation analysis as in Fig.1c, continue from above - grab the first limit point (Grab -> [Click Tab until pointer is on the left LP), change the axes (Axes -> Two par, and set the Ymax to 0.06),
+# and then run the bifurcation analysis (Run).
+
+# To run bifurcation dose-response analysis as in Fig.1d, set one of the regimes (bistable, criticality, reversible bistable or monostable; File -> Get par set -> [regime]) and the low activity initial conditions below (Ra=0), 
+# follow the steps as above, and run the bifurcation analysis against the input parameter LRa (in xppauto: Axes -> hi lo, Main Parm=LRa, Xmax=0.06, Ymax=1; then Run -> Steady state).
+
+# initial conditions:
+init Ra=0.0,Pdnfa=0.5
+# init Ra=0.5,Pdnfa=0.5
+
+# main ode system equaions:
+# active receptor fraction
+dRa/dt=Rt*((1-Ra-LRa)*(alpha1*(1-Ra-LRa)+alpha2*Ra+alpha3*LRa)-gamma_dnf*Pdnfa*Ra)
+# active P_dnf fraction
+dPdnfa/dt=k1*(1-Pdnfa-k21*Pdnfa-beta_dnf*Pdnfa*(Ra+LRa))
+
+# parameter values:
+# bifurcation parameter - gamma_dnf
+# values: bistable=2.5, criticality=2.957, rev_bistable=3.5, monostable=4.3, zero=0
+param gamma_dnf=2.5
+# separate regimes defined according to gamma_dnf value - can be chosen in xpp by File -> Get par set -> [regime]
+set bistable gamma_dnf=2.5
+set criticality gamma_dnf=2.957
+set reversible_bistable gamma_dnf=3.5
+set monostable gamma_dnf=4.3
+set zero gamma_dnf=0
+# input parameter:
+param LRa=0.0
+param alpha1=0.0017,alpha2=0.3,alpha3=1.0,beta_dnf=36.0558,k21=0.5
+# kinetic parameters (do not affect steady-state values):
+param Rt=0.8,k1=0.01
+
+# plot state space Pdnfa-Ra by default
+# you can visualize the nullclines with Nullclines -> New and vector field with Dir.field/flow -> Directed Field (enter grid size, 16 is fine)
+# Some ode solver and plotting settings
+@ meth=cvode
+@ xp=Pdnfa,yp=Ra,bound=1000000
+@ xlo=0,xhi=1,ylo=0,yhi=1
+@ dt=0.02,total=1000
+​
+# Some AUTO parameters
+@ autovar=x,autoxmin=0.0,autoymin=0.0,autoxmax=5,autoymax=1
+@ ntst=400,nmax=2500,npr=500,ds=0.0001,dsmin=0.0001,dsmax=0.005
+@ ncol=4,epsl=1e-4,parmin=-1,parmax=5,normmin=0,normmax=1000
+@ epsu=1e-4,epss=0.0001
+done
