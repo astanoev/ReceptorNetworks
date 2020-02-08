@@ -46,8 +46,8 @@ classdef multi_pulse_experiment < experiments.experiment
                 
         function input = set_up_input(obj)
             if isempty(obj.pulse_amplitude)
-                target_egf_egfr_p = 0.15;
-                obj.pulse_amplitude = obj.model.tune_egf_free(target_egf_egfr_p); %pulse_amp = 1.5;
+                target_LRa = 0.15;
+                obj.pulse_amplitude = obj.model.tune_Lt(target_LRa); %pulse_amp = 1.5;
             end
             input = zeros(size(obj.time));
             for i=1:obj.n_pulses

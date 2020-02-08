@@ -1,14 +1,15 @@
-classdef stream_poisson_pulse_experiment < experiments.experiment
+classdef stream_pulse_experiment < experiments.experiment
     properties
         pulse_duration_min
         pulse_duration_frames
+        pulse_amplitude
         interpulse_duration
         lambda % number of pulses per hour (60minute_to_frames)
         n_pulses
     end
         
     methods
-        function obj = stream_poisson_pulse_experiment(n_pulses, lambda, t_total_min, model)
+        function obj = stream_pulse_experiment(n_pulses, lambda, t_total_min, model)
             obj@experiments.experiment();
             obj.n_pulses = n_pulses;
             obj.lambda = lambda;
@@ -31,20 +32,18 @@ classdef stream_poisson_pulse_experiment < experiments.experiment
         end
                 
         function input = set_up_input(obj)
-            target_egf_egfr_p = 0.15;
-            pulse_amp = obj.model.tune_egf_free(target_egf_egfr_p);
+            if isempty(obj.pulse_amplitude)
+                target_LRa = 0.15;
+                obj.pulse_amplitude = obj.model.tune_Lt(target_LRa);
+            end
             obj.set_up_time();
             obj.input = zeros(length(obj.time),1);
-%             p = rand(obj.n_pulses,1);
-%             r = -1/(obj.lambda/60)*log(1-p);
-%             times = (cumsum(r)-r(1))*obj.minute_to_frames + [0:(obj.n_pulses-1)]'*obj.pulse_duration;
-            %times_pulses_frames = [0;(obj.t_total_frames - (obj.pre_stimulus_frames +obj.post_stimulus_frames) - (obj.n_pulses+1)*obj.pulse_duration_frames)*rand(obj.n_pulses-1,1)];
             times_pulses_frames = [0;randi(obj.t_total_frames - (obj.pre_stimulus_frames +obj.post_stimulus_frames) - (obj.n_pulses+1)*obj.pulse_duration_frames,obj.n_pulses-1,1)];
-            times_pulses_frames = sort(times_pulses_frames) + [0:(obj.n_pulses-1)]'*obj.pulse_duration_frames;
+            times_pulses_frames = sort(times_pulses_frames) + (0:(obj.n_pulses-1))'*obj.pulse_duration_frames;
             for i=1:size(times_pulses_frames,1)
                 t_start = obj.pre_stimulus_frames + times_pulses_frames(i);
                 t_end = t_start + obj.pulse_duration_frames -1;
-                obj.input(t_start:t_end,:) = repmat(pulse_amp, obj.pulse_duration_frames, 1);
+                obj.input(t_start:t_end,:) = repmat(obj.pulse_amplitude, obj.pulse_duration_frames, 1);
             end
             input = obj.input;
         end

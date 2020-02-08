@@ -27,7 +27,6 @@ classdef plot_xpp
             sn2 = idx_unst(1);
             lw = 3;
             patch(ax,'Faces',1:4,'Vertices',[x(sn1),0;x(sn1),1;x(sn2),1;x(sn2),0],'EdgeColor','none','FaceColor',obj.colors.bistable,'FaceAlpha',.35);
-            %patch(ax,'Faces',1:4,'Vertices',[x(sn2),0;x(sn2),1;5,1;5,0],'EdgeColor','none','FaceColor',[obj.colors.criticality;obj.colors.criticality;obj.colors.monostable;obj.colors.monostable],'FaceAlpha',.35);
             vtx = [x(sn2),0;x(sn2),1;x(sn2)+0.1*(5-x(sn2)),1;x(sn2)+0.2*(5-x(sn2)),1;5,1;5,0;x(sn2)+0.2*(5-x(sn2)),0;x(sn2)+0.1*(5-x(sn2)),0];
             cc = obj.colors.criticality;
             cm = obj.colors.monostable;

@@ -2,6 +2,7 @@ classdef figure3
     properties
         fontsize = 20;
         fig_size = [700, 650];
+        n_pulses = 12;
     end
     
     methods
@@ -44,10 +45,11 @@ classdef figure3
             ax = axes('Parent', fig, 'Position', [0.18,0.18,0.75,0.75]);
             hold(ax,'on'); box(ax,'on');
             px = plot_xpp();
-            histogram(ax, s.active_fraction_mono, 0:.025:1, 'FaceColor', px.colors.monostable);
-            histogram(ax, s.active_fraction_revbst, 0:.025:1, 'FaceColor', px.colors.rev_bistable);
-            histogram(ax, s.active_fraction_mem, 0:.025:1, 'FaceColor', px.colors.criticality);
-            histogram(ax, s.active_fraction_bst, 0:.025:1, 'FaceColor', px.colors.bistable);
+            bin_size = 0.025; b_min = 0; b_max = 1;
+            histogram(ax, s.active_fraction_mono, (b_min-bin_size/2):bin_size:(b_max+bin_size/2), 'FaceColor', px.colors.monostable);
+            histogram(ax, s.active_fraction_revbst, (b_min-bin_size/2):bin_size:(b_max+bin_size/2), 'FaceColor', px.colors.rev_bistable);
+            histogram(ax, s.active_fraction_mem, (b_min-bin_size/2):bin_size:(b_max+bin_size/2), 'FaceColor', px.colors.criticality);
+            histogram(ax, s.active_fraction_bst, (b_min-bin_size/2):bin_size:(b_max+bin_size/2), 'FaceColor', px.colors.bistable);
             obj.finish_plot_ax(ax, 'Duration of receptor activity (Fraction of time)', 'Frequency');
             obj.finish_plot_fig(fig);
         end
@@ -63,10 +65,11 @@ classdef figure3
             ax = axes('Parent', fig, 'Position', [0.18,0.18,0.75,0.75]);
             hold(ax,'on'); box(ax,'on');
             px = plot_xpp();
-            histogram(ax, s.active_patches_mono, 1:12, 'FaceColor', px.colors.monostable);
-            histogram(ax, s.active_patches_revbst, 1:12, 'FaceColor', px.colors.rev_bistable);
-            histogram(ax, s.active_patches_mem, 1:12, 'FaceColor', px.colors.criticality);
-            histogram(ax, s.active_patches_bst, 1:12, 'FaceColor', px.colors.bistable);
+            bin_size = 1; b_min = 1; b_max = obj.n_pulses;
+            histogram(ax, s.active_patches_mono, (b_min-bin_size/2):bin_size:(b_max+bin_size/2), 'FaceColor', px.colors.monostable);
+            histogram(ax, s.active_patches_revbst, (b_min-bin_size/2):bin_size:(b_max+bin_size/2), 'FaceColor', px.colors.rev_bistable);
+            histogram(ax, s.active_patches_mem, (b_min-bin_size/2):bin_size:(b_max+bin_size/2), 'FaceColor', px.colors.criticality);
+            histogram(ax, s.active_patches_bst, (b_min-bin_size/2):bin_size:(b_max+bin_size/2), 'FaceColor', px.colors.bistable);
             xlim([0,13]);
             obj.finish_plot_ax(ax, {'Number of disjoint intervals','of receptor activity'}, 'Frequency');
             obj.finish_plot_fig(fig);
@@ -90,36 +93,35 @@ classdef figure3
             % should be plotted
             regimes = regimes(2);
             
-            n_pulses = 12;
             lambda = 1.5; % pulses per hour
             t_per_pulse_min = 60/lambda;
             t_pre_stimulus_min = 2;
             t_post_stimulus_min = 2.5;
-            t_total_min = n_pulses*t_per_pulse_min +t_pre_stimulus_min +t_post_stimulus_min;
-            sppe = experiments.stream_poisson_pulse_experiment(n_pulses, lambda, t_total_min);
-            ms = model_simulation(model, sppe);
+            t_total_min = obj.n_pulses*t_per_pulse_min +t_pre_stimulus_min +t_post_stimulus_min;
+            spe = experiments.stream_pulse_experiment(obj.n_pulses, lambda, t_total_min);
+            ms = model_simulation(model, spe);
             for i = 1:numel(regimes)
                 % set regime
                 gamma_dnf = px.gamma_dnf.(regimes{i});
                 model.par.g1 = gamma_dnf;
                 ms.set_model(model);
                 ms.simulate();
-                ms.plot_fraction_phosphorylated('ax', ax2, 'color', px.colors.(regimes{i}), 'minor_format', true, 'plot_pulses', i==1, 'plot_input', i==1);
+                ms.plot_fraction_active('ax', ax2, 'color', px.colors.(regimes{i}), 'minor_format', true, 'plot_pulses', i==1, 'plot_input', i==1);
                 drawnow;
                 
-                mpe = experiments.multi_pulse_experiment(n_pulses);
+                mpe = experiments.multi_pulse_experiment(obj.n_pulses);
                 mpe.set_pulse_interval_min(40);
                 ms = model_simulation(model, mpe);
                 ms.simulate();
-                ms.plot_fraction_phosphorylated('ax', ax1, 'color', px.colors.(regimes{i}), 'minor_format', true, 'plot_pulses', i==1, 'plot_input', i==1);
+                ms.plot_fraction_active('ax', ax1, 'color', px.colors.(regimes{i}), 'minor_format', true, 'plot_pulses', i==1, 'plot_input', i==1);
                 drawnow;
                 
-                mpe = experiments.multi_pulse_experiment(n_pulses);
-                mpe.post_stimulus_min = mpe.post_stimulus_min + (40-22.5)*n_pulses;
+                mpe = experiments.multi_pulse_experiment(obj.n_pulses);
+                mpe.post_stimulus_min = mpe.post_stimulus_min + (40-22.5)*obj.n_pulses;
                 mpe.set_pulse_interval_min(22.5);
                 ms = model_simulation(model, mpe);
                 ms.simulate();
-                ms.plot_fraction_phosphorylated('ax', ax3, 'color', px.colors.(regimes{i}), 'minor_format', true, 'plot_pulses', i==1, 'plot_input', i==1);
+                ms.plot_fraction_active('ax', ax3, 'color', px.colors.(regimes{i}), 'minor_format', true, 'plot_pulses', i==1, 'plot_input', i==1);
                 drawnow;
             end
             set(fig,'Position',[250, 250, 1100, 875]);
@@ -135,12 +137,12 @@ classdef figure3
             obj.finish_plot_fig(fig);
         end
         
-        function figure3_double_pulse(obj, model, ax, color, with_pulses_input)
+        function figure3_double_pulse(obj, model, ax, color, with_pulses_input) %#ok<INUSL>
             mpe = experiments.multi_pulse_experiment(2);
             mpe.set_pulse_interval_min(20);
             ms = model_simulation(model, mpe);
             ms.simulate();
-            ms.plot_fraction_phosphorylated('ax', ax, 'color', color, 'plot_pulses', with_pulses_input, 'plot_input', with_pulses_input);
+            ms.plot_fraction_active('ax', ax, 'color', color, 'plot_pulses', with_pulses_input, 'plot_input', with_pulses_input);
         end
         
         function distributions_stream_pulses(obj)
@@ -150,25 +152,25 @@ classdef figure3
             active_fraction_mono = zeros(n_reps,1); active_patches_mono = zeros(n_reps,1);
             active_fraction_bst = zeros(n_reps,1); active_patches_bst = zeros(n_reps,1);
             
-            n_pulses = 12;
             lambda = 1.5; % pulses per hour
             t_per_pulse_min = 60/lambda;
             t_pre_stimulus_min = 2;
             t_post_stimulus_min = 2.5;
-            t_total_min = n_pulses*t_per_pulse_min +t_pre_stimulus_min +t_post_stimulus_min;
+            t_total_min = obj.n_pulses*t_per_pulse_min +t_pre_stimulus_min +t_post_stimulus_min;
             
             px = plot_xpp();
             gamma_dnf = px.gamma_dnf;
+            n_pulses = obj.n_pulses; %#ok<PROP> % for parfor loop
             
-            try task = getCurrentTask(); catch; task = []; end
-            if ~isempty(task); tstr = num2str(task.ID); else; tstr = 'single'; end
             parfor i=1:n_reps
+                try task = getCurrentTask(); catch; task = []; end
+                if ~isempty(task); tstr = num2str(task.ID); else; tstr = 'single'; end
                 disp(['lab ',tstr,': ',num2str(i)]);
                 mod = models.simple_dnf_model;
-                mod.par.g1 = gamma_dnf.('criticality');
-                ms = model_simulation(mod,experiments.stream_poisson_pulse_experiment(n_pulses, lambda, t_total_min));
+                mod.par.g1 = gamma_dnf.('criticality'); %#ok<*PFBNS>
+                ms = model_simulation(mod,experiments.stream_pulse_experiment(n_pulses, lambda, t_total_min)); %#ok<PROP>
                 ms.simulate();
-                [active_fraction_mem(i), active_patches_mem(i)] = ms.calc_active_fraction();
+                [active_fraction_mem(i), active_patches_mem(i)] = ms.calc_active_fraction(); %#ok<*PFOUS>
                 mod.par.g1 = gamma_dnf.('rev_bistable');
                 ms.set_model(mod)
                 ms.simulate();

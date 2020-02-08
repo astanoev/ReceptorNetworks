@@ -10,7 +10,7 @@ classdef plotting
     end
     
     methods
-        function plot_fraction_phosphorylated(obj, fig, ax, t, minor_format, ms_obj)
+        function plot_fraction_active(obj, fig, ax, t, minor_format, ms_obj)
             xlim(ax, [min(t),max(t)+1e-5]);
             ylim(ax, [0,1]);
             box(ax,'on');
@@ -30,10 +30,9 @@ classdef plotting
             end
         end
         
-        function plot_state_space(obj, fig, model, EGFfree, dAB, q, x_lim, y_lim)
-            ax = fig.CurrentAxes;
+        function plot_state_space(obj, ax, dAB, q, x_lim, y_lim)
             mags = log(dAB);
-            currentColormap = colormap(hsv);
+            currentColormap = hsv;
             currentColormap = flipud(currentColormap);
             [~, ~, ind] = histcounts(mags, size(currentColormap, 1));
             ind = max(ind,20); % substitute circular red-violet colors in colormap
@@ -44,21 +43,12 @@ classdef plotting
             set(q.Head, 'ColorBinding', 'interpolated', 'ColorData', reshape(cmap(1:3,:,:), [], 4).');   %'
             set(q.Tail, 'ColorBinding', 'interpolated', 'ColorData', reshape(cmap(1:2,:,:), [], 4).');
             
-            axis equal;
+            axis(ax,'equal');
             set(ax,'XTick',0:.2:1,'YTick',0:.2:1);
             xlim(ax,[0,y_lim]); ylim(ax,[0,x_lim]);
             set(ax, 'FontSize', 20, 'fontname', 'Arial');
-            %xlabel('PTPRGa'); ylabel('EGFRp');
-            %xlabel('P_{DNF,a}'); ylabel('R_a');
-            xlabel(ax,'PTP activity', 'FontSize', 25); ylabel(ax,'EGFR phosphorylation', 'FontSize', 25);
-            box on;
-            
-            %s = load('mat/png.mat');
-            %setprinttemplate(fig,s.template);
-            %set(fig, 'Position', [488, 162, 650, 577]);
-            
-            filename = sprintf('figure_ss_g1=%.5f_egf=%.3f', model.par.g1, EGFfree);
-            if obj.savefig==1; obj.save_figure(filename, fig); end
+            xlabel(ax,'P_{DNF,a}'); ylabel('R_a');
+            box(ax,'on');
         end
         
         function save_figure(obj, filename, fig)

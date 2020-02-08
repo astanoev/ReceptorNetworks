@@ -62,7 +62,7 @@ classdef agent_based_model < handle
             end
             obj.(par_name) = par_value/(models.agent_based_model.interaction_radius^2*pi);
             if strncmp(par_name,'k',1)
-                obj.(par_name) = par_value;%/models.agent_based_model.delta_t;
+                obj.(par_name) = par_value;
             end
         end
     end

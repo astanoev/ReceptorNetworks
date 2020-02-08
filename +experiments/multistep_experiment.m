@@ -27,8 +27,8 @@ classdef multistep_experiment < experiments.experiment
         end
         
         function input = set_up_input(obj)
-            target_egf_egfr_p = 0.012;
-            obj.step_amplitude = obj.model.tune_egf_free(target_egf_egfr_p); %pulse_amp = 1.5;
+            target_LRa = 0.012;
+            obj.step_amplitude = obj.model.tune_Lt(target_LRa); %pulse_amp = 1.5;
             input = zeros(size(obj.time));
             for i=1:(2*obj.n_steps-1)
                 t_start = obj.pre_stimulus_frames + (i-1)*obj.step_duration_frames;

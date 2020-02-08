@@ -14,7 +14,7 @@ init Ra=0.0,Pdnfa=0.5
 
 # main ode system equaions:
 # active receptor fraction
-dRa/dt=Rt*((1-Ra-LRa)*(alpha1*(1-Ra-LRa)+alpha2*Ra+alpha3*LRa)-gamma_dnf*Pdnfa*Ra)
+dRa/dt=kR*((1-Ra-LRa)*(alpha1*(1-Ra-LRa)+alpha2*Ra+alpha3*LRa)-gamma_dnf*Pdnfa*Ra)
 # active P_dnf fraction
 dPdnfa/dt=k1*(1-Pdnfa-k21*Pdnfa-beta_dnf*Pdnfa*(Ra+LRa))
 
@@ -32,7 +32,7 @@ set zero gamma_dnf=0
 param LRa=0.0
 param alpha1=0.0017,alpha2=0.3,alpha3=1.0,beta_dnf=36.0558,k21=0.5
 # kinetic parameters (do not affect steady-state values):
-param Rt=0.8,k1=0.01
+param kR=0.8,k1=0.01
 
 # plot state space Pdnfa-Ra by default
 # you can visualize the nullclines with Nullclines -> New and vector field with Dir.field/flow -> Directed Field (enter grid size, 16 is fine)

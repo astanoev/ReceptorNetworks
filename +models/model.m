@@ -1,16 +1,4 @@
 classdef model < handle
-    
-    properties (Access = private)
-        par = struct(...
-        'Akt',1,'EGFRt',1.0,'PTPN2t',1.8,...
-        'a1',0.0017,'a2',0.3,'a3',1.0,...
-        'b1',36.0558,'b2',1.60248,'k1',0.1,...
-        'g1',2.43,'g2',0.061,'g3',0.001,...
-        'k21',0.5,'k34',0.22,'k4',2.25,'eps',0.001,... % k21 is k in Aneta's ode file
-        'kon',0.003,'Kd',5.56,'koff',5.56*0.003,...
-        'kint',0.005,'krec',0.005,'ktraf',2,'knpint',0.2,'kdeg',1);
-    end
-    
     properties
         init_conds
         labels
@@ -61,7 +49,7 @@ classdef model < handle
             name = fullmodel(end);
         end
         
-        function str = get_parameters_string(obj, EGF)
+        function str = get_parameters_string(obj)
             str = 'quasi_potential_landscape';
             par_fields = fields(obj.par);
             for i=1:length(par_fields)
@@ -75,19 +63,18 @@ classdef model < handle
             if nargin < 2; init_conds = [0., 1., 0.5, 0., 0., 0., 0., 0.]; end
             obj.init_conds = init_conds;
             obj.traj_cols = [0.3, 0.8, 0.4; 0.9, 0.1, 0.5];
-            obj.marker_cols = [0, 1, 0; 1, 0, 0];%[1, 0.6, 0; 0.235, 0.67, 0.9];
+            obj.marker_cols = [0, 1, 0; 1, 0, 0];
         end
         
-        function egf_free = tune_egf_free(obj, target_egf_egfr_p)
-            egf_free = target_egf_egfr_p.*obj.par.Kd./(1-target_egf_egfr_p);
+        function Lt = tune_Lt(obj, LRa)
+            Lt = LRa.*obj.par.Kd./(1-LRa);
         end
         
         function ind = get_index(obj, label)
             ind = find(strncmpi(obj.labels,label,length(label)));
         end
         
-        function q = set_state_space(obj, fig, q, EGFfree)
-            ax = fig.CurrentAxes;
+        function q = set_state_space(obj, ax, q, Lt)
             xy_grid_spacing = 0.05;
             x_lim = 0.8; y_lim = 0.8;
             x_array = 0 : xy_grid_spacing : x_lim;
@@ -95,83 +82,86 @@ classdef model < handle
             [A,B]=meshgrid(x_array,y_array);
             dA = zeros(size(A));
             dB = zeros(size(B));
-            exp = experiments.experiment(obj);
-            exp.input = EGFfree;
-            RG_index = obj.get_index('PTPRGat');
-            for i=1:size(A,1)
-                for j=1:size(A,2)
-                    % calculate quasi-steady-state values of all the other
-                    % variable, given current state, except PTPRG
-                    qsss = obj.quasi_steady_state(A(i,j), EGFfree); % set the other variables in a quasi-steady-state
-                    y = [A(i,j);qsss(1:end)];
-                    y(RG_index) = B(i,j);
-                    qss = ones(size(qsss));
-                    qss(RG_index-1) = 0;
+            sce = experiments.simple_convergence_experiment();
+            sce.set_up_input(Lt);
+            Pdnf_a_index = obj.get_index('Pdnf_a');
+            
+            qss = ones(numel(obj.labels)-1,1);
+            qss(Pdnf_a_index-1) = 0;
+            for j=1:size(A,2)
+                % calculate quasi-steady-state values of all the other
+                % variable, given current state, except Pdnf_a
+                qsss = obj.quasi_steady_state(A(1,j), Lt); % set the other variables in a quasi-steady-state
+                y = [A(1,j);qsss(1:end)];
+                for i=1:size(A,1)
+                    y(Pdnf_a_index) = B(i,j);
                     % calculate derivative for each point in state space
-                    %dydt = obj.df_model(0, y, 0, EGFfree, qss);
-                    dydt = obj.df_model(0, y, exp, qss);
+                    dydt = obj.df_model(0, y, sce, qss);
                     dA(i,j) = dydt(1);
-                    dB(i,j) = dydt(RG_index);
+                    dB(i,j) = dydt(Pdnf_a_index);
                 end
             end
             dAB = sqrt(dA.^2+dB.^2);
             if isempty(q)
                 q = quiver(ax,B,A,(dB./dAB.^0.75),(dA./dAB.^0.75));hold on;
+                uistack(q,'bottom');
+                plotting().plot_state_space(ax, dAB, q, x_lim, y_lim);
             else
                 set(q,'udata',(dB./dAB.^0.75),'vdata',(dA./dAB.^0.75));
             end
-            uistack(q,'bottom');
-            plotting().plot_state_space(fig, obj, EGFfree, dAB, q, x_lim, y_lim);
         end
         
-        function p = plot_nullclines(obj, EGFRpt, EGFfree, p)
-            nc = obj.get_nullclines(EGFRpt, EGFfree);
+        function p = plot_nullclines(obj, ax, Ra, Lt, p)
+            nc = obj.get_nullclines(Ra, Lt);
             if isempty(p)
                 p = [];
-                p(1) = plot(nc(:,1), EGFRpt, 'k', 'LineWidth',1);
-                p(2) = plot(nc(:,2), EGFRpt, 'k', 'LineWidth',1);
+                p(1) = plot(ax, nc(:,1), Ra, 'k', 'LineWidth',1);
+                p(2) = plot(ax, nc(:,2), Ra, 'k', 'LineWidth',1);
             else
                 set(p(1),'XData',nc(:,1));
                 set(p(2),'XData',nc(:,2));
             end
         end
         
-        function p_sep = plot_separatrix(obj, EGFRpt, EGFfree, p_sep)
+        function p_sep = plot_separatrix(obj, ax, Ra, Lt, p_sep)
             % plot separatrix when an unstable steady state is present:
             % revert the vectors in phase space and move according to them
             % (using Euler's method),
-            [EGFRpt_ss,PTPRGat_ss,~,stable] = obj.get_steady_states(EGFRpt, EGFfree);
-            if ~isempty(find(stable==0, 1))
-                exp = experiments.experiment(obj);
-                exp.input = EGFfree;
-                tsteps = 1000;
-                egfr = zeros(1,tsteps);
-                ptprg = zeros(1,tsteps);
-                for step=[1,-1] % for two opposite perturbations
-                    ind = tsteps/2+step+1*(step==-1); % midpoint in array
-                    egfr(ind) = EGFRpt_ss(stable==0)+step*1e-3; % perturb
-                    ptprg(ind) = PTPRGat_ss(stable==0)+step*1e-3;
-                    dt = 1; % dt of Euler's method
-                    % iterate till 2/(tsteps-1)
-                    for i=ind:step:(2*(step==-1)+(tsteps-1)*(step==1))
-                        % same procedure as for state space drawing
-                        qsss = obj.quasi_steady_state(egfr(i), EGFfree);
-                        y = [egfr(i);qsss(1:end)];
-                        y(2) = ptprg(i);
-                        qss = ones(size(qsss));
-                        qss(1) = 0;
-                        dydt = obj.df_model(0, y, exp, qss);
-                        % flip the derivative sign from '+' to '-' and
-                        % update the next state
-                        egfr(i+step) = egfr(i) - dt*dydt(1);
-                        ptprg(i+step) = ptprg(i) - dt*dydt(2);
+            [Ra_ss,Pdnf_a_ss,stable] = obj.get_steady_states(Ra, Lt);
+            unst_inxs = find(stable==0);
+            if ~isempty(unst_inxs)
+                sce = experiments.simple_convergence_experiment();
+                sce.set_up_input(Lt);
+                tsteps = 100;
+                R_sep = zeros(tsteps,numel(unst_inxs));
+                Pdnf_sep = zeros(tsteps,numel(unst_inxs));
+                for j = 1:numel(unst_inxs) % in case there are multiple unstable ss
+                    for step=[1,-1] % for two opposite perturbations
+                        ind = tsteps/2+step+1*(step==-1); % midpoint in array
+                        R_sep(ind,j) = Ra_ss(unst_inxs(j))+step*1e-3; % perturb
+                        Pdnf_sep(ind,j) = Pdnf_a_ss(unst_inxs(j))+step*1e-3;
+                        dt = 1; % dt of Euler's method
+                        % iterate till 2/(tsteps-1)
+                        for i=ind:step:(2*(step==-1)+(tsteps-1)*(step==1))
+                            % same procedure as for state space drawing
+                            qsss = obj.quasi_steady_state(R_sep(i), Lt);
+                            y = [R_sep(i,j);qsss(1:end)];
+                            y(2) = Pdnf_sep(i,j);
+                            qss = ones(size(qsss));
+                            qss(1) = 0;
+                            dydt = obj.df_model(0, y, sce, qss);
+                            % flip the derivative sign from '+' to '-' and
+                            % update the next state
+                            R_sep(i+step,j) = R_sep(i,j) - dt*dydt(1);
+                            Pdnf_sep(i+step,j) = Pdnf_sep(i,j) - dt*dydt(2);
+                        end
                     end
                 end
                 if isempty(p_sep)
-                    p_sep = plot(ptprg,egfr,'--','LineWidth',1,'Color',[0.57,0.57,0.57]);
+                    p_sep = plot(ax,Pdnf_sep,R_sep,'--','LineWidth',1,'Color',[0.57,0.57,0.57]);
                 else
-                    set(p_sep,'XData',ptprg);
-                    set(p_sep,'YData',egfr);
+                    set(p_sep,'XData',Pdnf_sep);
+                    set(p_sep,'YData',R_sep);
                 end
             else
                 if ~isempty(p_sep)
@@ -181,177 +171,81 @@ classdef model < handle
             end
         end
         
-        function [EGFRpt_ss,PTPRGat_ss,PTPN2at_ss,stable] = get_steady_states(obj, EGFRpt, EGFfree)
+        function [Ra_ss,Pdnf_a_ss,stable] = get_steady_states(obj, Ra, Lt)
             % get all steady state using rate-balance plot, to check also
             % for stability
-            [fr,br] = obj.get_rate_balance_rates(EGFRpt, EGFfree);
+            [fr,br] = obj.get_rate_balance_rates(Ra, Lt);
             % intersections of FR and BR gives the steady states (x-axis)
-            [EGFRpt_ss,~] = external_tools.intersections(EGFRpt,fr,EGFRpt,br,1);
-            EGFRpt_ss = EGFRpt_ss';
-            stable = ones(size(EGFRpt_ss));
-            for i=1:length(EGFRpt_ss)
-                [~,ind] = min(abs(EGFRpt-EGFRpt_ss(i))); % closest element of EGFRpt
-                if ind>1 && fr(ind-1)-br(ind-1)<0; % if left of s.s. BR>FR
-                    stable(i) = 0;
-                end
-                if ind<length(EGFRpt) && fr(ind+1)-br(ind+1)>0; % if right of s.s. FR>BR
-                    stable(i) = 0;
+            [Ra_ss,~] = external_tools.intersections(Ra,fr,Ra,br,1);
+            Ra_ss = Ra_ss';
+            tol = 1e-8;
+            for i=1:length(Ra_ss)
+                [fr_ss_i,br_ss_i] = obj.get_rate_balance_rates(Ra_ss(i), Lt);
+                step_move = 1e-6;
+                % iteratively refine the numerical solution until the
+                % difference between fr and br is smaller than a tolerance
+                while abs(fr_ss_i-br_ss_i)>tol
+                    Ra_ss_lr = [Ra_ss(i)-step_move,Ra_ss(i)+step_move];
+                    [fr_ss_ii,br_ss_ii] = obj.get_rate_balance_rates(Ra_ss_lr, Lt);
+                    [fb_diff, i_lr] = min(abs(fr_ss_ii-br_ss_ii));
+                    if fb_diff<abs(fr_ss_i-br_ss_i) % update Ra_ss(i)
+                        Ra_ss(i) = Ra_ss_lr(i_lr);
+                        fr_ss_i = fr_ss_ii(i_lr);
+                        br_ss_i = br_ss_ii(i_lr);
+                    else % reduce moving step
+                        step_move = 1/3*step_move;
+                    end
                 end
             end
-            qsss = obj.quasi_steady_state(EGFRpt_ss, EGFfree);
-            PTPRGat_ss = qsss(1,:);
-            PTPN2at_ss = qsss(3,:);
-            %nc = obj.get_nullclines(EGFRpt, EGFfree);
-            %[y,x] = intersections(EGFRpt,nc(:,1),EGFRpt,nc(:,2),1);
+            [fr_ss_l,br_ss_l] = obj.get_rate_balance_rates(Ra_ss-1e-6, Lt);
+            [fr_ss_r,br_ss_r] = obj.get_rate_balance_rates(Ra_ss+1e-6, Lt);
+            rate_diff_ss_l = (fr_ss_l-br_ss_l)>0;
+            rate_diff_ss_r = (fr_ss_r-br_ss_r)<0;
+            stable = rate_diff_ss_l .* rate_diff_ss_r;
+            stable(rate_diff_ss_l~=rate_diff_ss_r) = nan;
+            qsss = obj.quasi_steady_state(Ra_ss, Lt);
+            Pdnf_a_ss = qsss(1,:);
         end
         
-        function [ss_s,ss_u] = plot_steady_states(obj, EGFRpt, EGFfree, ss_s, ss_u)
-            [EGFRpt_ss,PTPRGat_ss,~,stable] = obj.get_steady_states(EGFRpt, EGFfree);
+        function [ss_s,ss_u] = plot_steady_states(obj, ax, Ra, Lt, ss_s, ss_u)
+            [Ra_ss,Pdnf_a_ss,stable] = obj.get_steady_states(Ra, Lt);
             if isempty(ss_s)
-                ss_s = plot(PTPRGat_ss(stable==1),EGFRpt_ss(stable==1),'o','markerfacecolor',[1, 0.6, 0],'markersize',8);
+                ss_s = plot(ax, Pdnf_a_ss(stable==1),Ra_ss(stable==1),'o','markerfacecolor',[1, 0.6, 0],'markersize',8);
             else
-                set(ss_s,'XData',PTPRGat_ss(stable==1));
-                set(ss_s,'YData',EGFRpt_ss(stable==1));
+                set(ss_s,'XData',Pdnf_a_ss(stable==1));
+                set(ss_s,'YData',Ra_ss(stable==1));
             end
             if isempty(ss_u)
-                ss_u = plot(PTPRGat_ss(stable==0),EGFRpt_ss(stable==0),'o','markerfacecolor',[0.235, 0.67, 0.9],'markersize',8);
+                ss_u = plot(ax, Pdnf_a_ss(stable==0),Ra_ss(stable==0),'o','markerfacecolor',[0.235, 0.67, 0.9],'markersize',8);
             else
-                set(ss_u,'XData',PTPRGat_ss(stable==0));
-                set(ss_u,'YData',EGFRpt_ss(stable==0));
+                set(ss_u,'XData',Pdnf_a_ss(stable==0));
+                set(ss_u,'YData',Ra_ss(stable==0));
             end
         end
         
-        function [ss_s,ss_u] = plot_steady_states_3d(obj, EGFRpt, EGFfree, ss_s, ss_u)
-            [EGFRpt_ss,PTPRGat_ss,PTPN2at_ss,stable] = obj.get_steady_states(EGFRpt, EGFfree);
-            if isempty(ss_s)
-                ss_s = plot3(PTPRGat_ss(stable==1),PTPN2at_ss(stable==1),EGFRpt_ss(stable==1),'o','markerfacecolor',[1, 0.6, 0],'markersize',8);
-            else
-                set(ss_s,'XData',PTPRGat_ss(stable==1));
-                set(ss_s,'YData',PTPN2at_ss(stable==1));
-                set(ss_s,'ZData',EGFRpt_ss(stable==1));
-            end
-            if isempty(ss_u)
-                ss_u = plot3(PTPRGat_ss(stable==0),PTPN2at_ss(stable==0),EGFRpt_ss(stable==0),'o','markerfacecolor',[0.235, 0.67, 0.9],'markersize',8);
-            else
-                set(ss_u,'XData',PTPRGat_ss(stable==0));
-                set(ss_u,'YData',PTPN2at_ss(stable==0));
-                set(ss_u,'ZData',EGFRpt_ss(stable==0));
-            end
+        function nc = get_nullclines(obj, Ra, Lt)
         end
         
-        function nc = get_nullclines(obj, EGFRpt, EGFfree)
-            nc = zeros(length(EGFRpt),2);
-            vals = quasi_steady_state(obj, EGFRpt, EGFfree);
-            PTPRGat_qss = vals(1,:); EGF_EGFRpt = vals(2,:); PTPN2at_qss = vals(3,:);
-            EGFRnpt = (1 - EGFRpt - EGF_EGFRpt);
-            nc(:,1) = (EGFRnpt.*(obj.par.a1.*EGFRnpt +obj.par.a2.*EGFRpt +obj.par.a3.*EGF_EGFRpt) - obj.par.g3.*EGFRpt - obj.par.g2.*PTPN2at_qss.*EGFRpt)./(EGFRpt.*obj.par.g1); % EGFRpt-nc
-            nc(:,2) = PTPRGat_qss;
-        end
-        
-        function p = plot_rate_balance(obj, EGFRpt, EGFfree, p)
-            [fr,br] = obj.get_rate_balance_rates(EGFRpt, EGFfree);
+        function p = plot_rate_balance(obj, ax, Ra, Lt, p)
+            [fr,br] = obj.get_rate_balance_rates(Ra, Lt);
             if isempty(p)
                 p = [];
                 hold on;
-                p(1) = plot(EGFRpt, fr, 'b', 'LineWidth',2);
-                p(2) = plot(EGFRpt, br, 'r', 'LineWidth',2);
+                p(1) = plot(ax, Ra, fr, 'b', 'LineWidth',2);
+                p(2) = plot(ax, Ra, br, 'r', 'LineWidth',2);
             else
                 set(p(1),'YData',fr);
                 set(p(2),'YData',br);
             end
         end
         
-        function [fr,br] = get_rate_balance_rates(obj, EGFRpt, EGFfree)
-            [PTPRGat_qss, EGF_EGFRpt, PTPN2at_qss] = deal(obj.quasi_steady_state(EGFRpt, EGFfree));
-            EGFRnpt = (1 - EGFRpt - EGF_EGFRpt);
-            fr = obj.par.EGFRt*EGFRnpt.*(obj.par.a1.*EGFRnpt +obj.par.a2.*EGFRpt +obj.par.a3.*EGF_EGFRpt); % EGFRpt-nc
-            br = obj.par.EGFRt*(obj.par.g1*PTPRGat_qss.*EGFRpt +obj.par.g2*PTPN2at_qss.*EGFRpt +obj.par.g3*EGFRpt);
+        function [fr,br] = get_rate_balance_rates(obj)
         end
         
-        function vals = quasi_steady_state(obj, EGFRpt, EGFfree)
-            %EGF_EGFRpt = (obj.EGFRt+EGFfree+obj.Kd-sqrt((obj.EGFRt+EGFfree+obj.Kd).^2-4*obj.EGFRt*EGFfree))/(2*obj.EGFRt)*ones(size(EGFRpt));
-            EGF_EGFRpt = EGFfree/(EGFfree+obj.par.Kd).*ones(size(EGFRpt)); % without depletion
-            PTPRGat_qss = 1./(obj.par.k21 + 1 +obj.par.b1*(EGFRpt+EGF_EGFRpt));
-            PTPN2at_qss = 1 - 1./(obj.par.k34 + 1 +obj.par.b2*(EGFRpt+EGF_EGFRpt));
-            vals = [PTPRGat_qss; EGF_EGFRpt; PTPN2at_qss];
+        function vals = quasi_steady_state(obj)
         end
         
-        function y = find_steady_state(obj, EGFRpt_init, input, return_saddle)
-            options = optimoptions('fsolve','Display','none','TolFun',1e-12,'TolX',1e-12,'Algorithm','levenberg-marquardt');
-            EGFRpt_init_init = EGFRpt_init;
-            has_minus = 1;
-            while has_minus>0 && EGFRpt_init>=0
-                init_cond = [EGFRpt_init, obj.quasi_steady_state(EGFRpt_init, input)'];
-                has_minus = sum(init_cond<0);
-                EGFRpt_init = EGFRpt_init - 0.05;
-            end
-            func = @(y) obj.df_model(0, y, 0, input);
-            
-%             options = odeset('RelTol',1e-12,'AbsTol',1e-12);
-%             t = 0:.1:500;
-%             func = @(tt, y) obj.df_model(tt, y, t, input*ones(size(t)))';
-%             sol = ode45(func, [0 500], init_cond, options);
-%             y = sol.y(:,end)';
-%             return;
-            [y,~,exitflag,~,J] = fsolve(func,init_cond,options);
-            if (exitflag<=0) || sum(real(eig(J))>1e-12)>0
-            %if (exitflag~=1 && exitflag~=3)% || sum(real(eig(J))>=0)>0
-                if return_saddle; y=input; return; end
-                EGFRpt_init = 1-EGFRpt_init;
-                has_minus = 1;
-                while has_minus>0 && EGFRpt_init>=0
-                    init_cond = [EGFRpt_init, obj.quasi_steady_state(EGFRpt_init, input)'];
-                    has_minus = sum(init_cond<0);
-                    EGFRpt_init = EGFRpt_init - 0.05;
-                end
-                %init_cond = [EGFRpt_init, obj.quasi_steady_state(EGFRpt_init, input)'];
-                if has_minus==0
-                    [y,~,exitflag,~,J] = fsolve(func,init_cond,options);
-                else
-                    EGFRpt_init = EGFRpt_init_init;
-                    init_cond = [EGFRpt_init, obj.quasi_steady_state(EGFRpt_init, input)'];
-                end
-                if (exitflag<=0) || sum(real(eig(J))>1e-12)>0
-                    options = odeset('RelTol',1e-12,'AbsTol',1e-12);
-                    t = 0:.1:500;
-                    func = @(tt, y) obj.df_model(tt, y, t, input*ones(size(t)));
-                    sol = ode45(func, [0 500], init_cond, options);
-                    y = sol.y(:,end)';
-%                     assert(norm(y(2:end)-obj.quasi_steady_state(y(1), input)')<1e-12, 'quasi-steady-state not matching final steady state!');
-                end
-            end
-        end
-        
-        function [] = eventfun(t,y,x)
-            
-        end
-        
-        function [dydt] = df_model(obj, tt, y, t_vec, EGF_vec)
-            [~, index] = min(abs(t_vec-tt));
-            EGFfree = EGF_vec(index);
-            
-            dydt = zeros(8,1);
-            
-            EGFRpt = y(1); EGFRnpt = y(2);
-            PTPRGat = y(3); PTPRGit = 1-PTPRGat;
-            EGFRendo_pt = y(4); EGFRendo_npt = y(5);
-            EGF_EGFRpt = y(6); EGF_EGFRendo_pt = y(7);
-            PTPN2a = obj.par.PTPN2t;
-            %EGFRnpt = 1 -EGFRpt -EGFRendo_pt -EGFRendo_npt -EGF_EGFRpt -EGF_EGFRendo_pt;
-            
-            a = 3.252e+09; b = -21.68; c = 44.27; d = -2.765;
-            x = obj.par.EGFRt-EGF_EGFRendo_pt*obj.par.EGFRt;
-            Akt_a = a.*exp(b.*x)+c.*exp(d.*x);
-            if obj.Akt==0; Akt_ef = 1; else; Akt_ef = Akt_a; end
-
-            dydt(1) = obj.par.EGFRt*EGFRnpt*(obj.par.a1*EGFRnpt +obj.par.a2*EGFRpt +obj.par.a3*EGF_EGFRpt) -obj.par.g1*PTPRGat*EGFRpt -obj.par.g3*EGFRpt -obj.par.ktraf*obj.par.kint*EGFRpt -obj.par.kon*EGFRpt*EGFfree + 0.5*obj.par.koff*EGF_EGFRpt; %EGFRpt
-            dydt(2) = -obj.par.EGFRt*EGFRnpt*(obj.par.a1*EGFRnpt +obj.par.a2*EGFRpt +obj.par.a3*EGF_EGFRpt) +obj.par.g1*PTPRGat*EGFRpt +obj.par.g3*EGFRpt -obj.par.ktraf*obj.par.knpint*obj.par.kint*EGFRnpt +Akt_ef*obj.par.ktraf*obj.par.krec*EGFRendo_npt -obj.par.kon*EGFRnpt*EGFfree + 0.5*obj.par.koff*EGF_EGFRpt; %EGFRnpt
-            dydt(3) = obj.par.k1*(PTPRGit -obj.par.k21*PTPRGat -obj.par.b1*obj.par.EGFRt*(EGFRpt +EGF_EGFRpt)*PTPRGat); %PTPRGat
-            dydt(4) = obj.par.ktraf*obj.par.kint*EGFRpt -obj.par.g2*PTPN2a*EGFRendo_pt; %EGFRendo_pt
-            dydt(5) = obj.par.g2*PTPN2a*EGFRendo_pt - Akt_ef*obj.par.ktraf*obj.par.krec*EGFRendo_npt +obj.par.ktraf*obj.par.knpint*obj.par.kint*EGFRnpt; %EGFRendo_npt
-            dydt(6) = -obj.par.ktraf*obj.par.kdeg*obj.par.kint*EGF_EGFRpt + obj.par.kon*(EGFRpt +EGFRnpt)*EGFfree -obj.par.koff*EGF_EGFRpt; %EGF_EGFRpt
-            dydt(7) = obj.par.ktraf*obj.par.kdeg*obj.par.kint*EGF_EGFRpt; %EGF_EGFRendo_npt
-            %dydt(8) = kf*freq*(Akt_t-Akt_a) -kb*Akt_a; %Akt_a
+        function [dydt] = df_model(obj, t, y)
         end
     end
 end

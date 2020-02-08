@@ -60,8 +60,8 @@ classdef figure1
                 % convert time to minutes
                 time_min = ms.experiment.correct_time(ms.time);
                 % get profiles for LRa and Ra
-                LRa = ms.state(strcmp(ms.model.labels,'EGF\_EGFRpt'),:);
-                Ra = ms.state(strcmp(ms.model.labels,'EGFRpt'),:);
+                LRa = ms.state(strcmp(ms.model.labels,'LRa'),:);
+                Ra = ms.state(strcmp(ms.model.labels,'Ra'),:);
                 if i==numel(regimes)
                     % plot the LRa input with the first plot
                     plot(ax, time_min, LRa, 'LineWidth', 3, 'Color', [0.75,0.75,0.75]);

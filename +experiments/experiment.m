@@ -1,7 +1,6 @@
 classdef experiment < handle
     properties
         model
-        %model_simulation
         input = [];
         t_total_min
         t_total_sec
@@ -19,8 +18,6 @@ classdef experiment < handle
     methods
         function obj = experiment(model)
             if nargin>=1; obj.model = model; end
-            %obj.model_simulation = model_simulation;
-            %obj.set_up_doses();
         end
         
         function time_min = get.time_min(obj)
@@ -63,23 +60,11 @@ classdef experiment < handle
             input = 0;
             if ~isempty(obj.input)
                 index = round(t*obj.fr_per_sec+1);
-                %[~, index] = min(abs(obj.time-t));
                 input = obj.input(index);
             end
         end
         
-        function input = set_up_input(obj)
-            input = zeros(size(obj.model_simulation.t));
-            target_egf_egfr_p = 0.05;
-            pulse_amp = target_egf_egfr_p*obj.model.kd/(1-target_egf_egfr_p);
-            offset = 350*obj.model_simulation.fr_per_tp;
-            duration = 100;
-            between_pulses = 700;
-            n_pulses = 5;
-            for i=1:n_pulses
-                input(offset + ((i-1)*between_pulses*obj.model_simulation.fr_per_tp:((i-1)*between_pulses*obj.model_simulation.fr_per_tp+duration*obj.model_simulation.fr_per_tp))) = pulse_amp;
-            end
-            obj.input = input;
+        function set_up_input(obj)
         end
     end
 end
