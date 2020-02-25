@@ -4,26 +4,39 @@ classdef abs_animation < handle
     %   
     
     properties 
-        EGFR_state_cols = [[255,225,225]./255;[248,102,101]./255;[0,0.8,0]];
-        PTPRG_state_cols = [[223,223,253]./255;[104,108,249]./255];
+        R_state_cols = [[255,225,225]./255;[248,102,101]./255;[0,0.8,0]];
+        P_dnf_state_cols = [[223,223,253]./255;[104,108,249]./255];
         marker_size = 100;
         square_size = 3.5; % um - width and length
-        folder_data = 'data'; %'\\\\billy.storage.mpi-dortmund.mpg.de\\abt2\\group\\agkoseska\\PTP_Theory_paper\\Analysis\\single_molecule\\data\\'
+        folder_data = 'data\agent_based_simulations';
         filename_format = 'agent_based_ics_hl=%d_g1=%g_rep=%d_part=%d.mat';
         t_mem = 50;
+        % sa - 0-w/o saving, 1-save as separate pngs, 2-save directly into video
         save_animation = 0;
+        t_current;
+        % animation starting frame (dashed line)
+        t_start = 1;
         t_stop = Inf;
-        plot_bif = false;
+        combined = false;
+        paused = false;
+        plot_conc_ratio_bkg = false;
+        plot_R_active = true;
+        plot_R_inactive = true;
+        plot_P_dnf_active = false;
+        plot_P_dnf_inactive = false;
+        
         g1
         ics_hl
-        
+        rep
+        n_parts = 1;        
         model = models.agent_based_model;
+        
         time_steps;
-        EGFR_positions;
-        PTPRG_positions;
-        EGFR_states;
-        PTPRG_states;
-        EGFR_phosphorylations;
+        R_positions;
+        P_dnf_positions;
+        R_states;
+        P_dnf_states;
+        R_activation_events;
         anim_fig;
         anim_ax;
         anim_btn_pause_resume;
@@ -34,127 +47,173 @@ classdef abs_animation < handle
         conc_ratio_fig; 
         conc_ratio_ax; 
         conc_ratio_p;
-        conc_ratio_bif_fig;
-        conc_ratio_bif_ax;
-        conc_ratio_bif_sc;
-        EGFR_plot;
-        PTPRG_plot;
-        paused = false;
-        t_current;
-        gpu;
-        plot_conc_ratio_bkg = false;
-        plot_egfr_active = true;
-        plot_egfr_inactive = false;
-        plot_rg_active = true;
-        plot_rg_inactive = false;
+        R_plot;
+        P_dnf_plot;
     end
     
     methods
-        function obj = abs_animation(abs_obj)
-            if nargin<1
-                date = 'abs'; %date = '06082019_v30_v31';
-                obj.ics_hl = 1;
-                obj.g1 = 6;
-                rep = 7;
-                n_parts = 1;
-                if obj.load_files(date, obj.ics_hl, obj.g1, rep, n_parts)
-                    obj.plot_all;
+        function obj = abs_animation(varargin)
+            p = inputParser;
+            addOptional(p, 'abs_obj', []);
+            addOptional(p, 'ics_hl', 1);
+            addOptional(p, 'g1', 4.95);
+            addOptional(p, 'rep', 1);
+            addOptional(p, 'n_parts', 1);
+            parse(p, varargin{:});
+            if isempty(p.Results.abs_obj)
+                obj.ics_hl = p.Results.ics_hl;
+                obj.g1 = p.Results.g1;
+                obj.rep = p.Results.rep;
+                obj.n_parts = p.Results.n_parts;
+                if ~obj.load_files()
+                    disp('unsuccessful loading - generating new simulation!');
+                    obj.simulate();
+                    if ~obj.load_files()
+                        disp('error loading - stopping program!');
+                        return;
+                    end
                 end
             else
-                obj.EGFR_states = single(abs_obj.EGFR_states);
-                obj.PTPRG_states = single(abs_obj.PTPRG_states);
-                obj.EGFR_phosphorylations = abs_obj.EGFR_phosphorylations.get();
-                if isempty(abs_obj.EGFR_positions)
+                abs_obj = p.Results.abs_obj;
+                obj.ics_hl = abs_obj.ics_hl;
+                obj.n_parts = abs_obj.n_parts;
+                obj.g1 = abs_obj.model.g1*(abs_obj.model.interaction_radius^2*pi);
+                obj.R_states = single(abs_obj.R_states);
+                obj.P_dnf_states = single(abs_obj.P_dnf_states);
+                obj.R_activation_events = abs_obj.R_activation_events.get();
+                if isempty(abs_obj.R_positions)
                     abs_obj.calculate_positions();
                 end
-                obj.EGFR_positions = abs_obj.EGFR_positions;
-                obj.PTPRG_positions = abs_obj.PTPRG_positions;
+                obj.R_positions = abs_obj.R_positions;
+                obj.P_dnf_positions = abs_obj.P_dnf_positions;
                 obj.model = abs_obj.model;
                 obj.time_steps = abs_obj.model.time_steps;
             end
+            if ~isempty(dbstack(1)); return; end
+            % animate if called from editor
+            obj.plot_all;
         end
         
-        function success = load_files(obj, date, ics_hl, g1, rep, n_parts)
-            str = sprintf('loaded %d/%d',0,n_parts);
+        function success = load_files(obj)
+            str = sprintf('loaded %d/%d',0,obj.n_parts);
             fprintf(str);
-            for part = 1:n_parts
-                filename = sprintf(obj.filename_format,ics_hl, g1, rep, part);
-                if ~exist(fullfile(obj.folder_data, date, filename),'file')
+            for part = 1:obj.n_parts
+                % load separate data files to piece together animation
+                filename = sprintf(obj.filename_format, obj.ics_hl, obj.g1, obj.rep, part);
+                if ~exist(fullfile(obj.folder_data, filename),'file')
                     success = 0;
                     fprintf('...missing files\n');
                     return;
                 end
-                s = load(fullfile(obj.folder_data, date, filename));
+                s = load(fullfile(obj.folder_data, filename));
                 if part==1
-                    obj.EGFR_states = s.abs_obj.EGFR_states;
-                    obj.PTPRG_states = s.abs_obj.PTPRG_states;
-                    if isempty(s.abs_obj.EGFR_positions)
-                        s.abs_obj.calculate_positions();
+                    obj.R_states = s.abs_obj.R_states;
+                    obj.P_dnf_states = s.abs_obj.P_dnf_states;
+                    if isempty(s.abs_obj.R_positions)
+                        try
+                            s.abs_obj.calculate_positions();
+                        catch
+                            % older versions of matlab do not have the
+                            % random number generator that was used for the
+                            % single-molecule positions
+                            success = 0;
+                            fprintf('...threefry missing\n');
+                            return;
+                        end
                     end
-                    obj.EGFR_positions = s.abs_obj.EGFR_positions;
-                    obj.PTPRG_positions = s.abs_obj.PTPRG_positions;
-                    obj.EGFR_phosphorylations = s.abs_obj.EGFR_phosphorylations.get();
+                    obj.R_positions = s.abs_obj.R_positions;
+                    obj.P_dnf_positions = s.abs_obj.P_dnf_positions;
+                    obj.R_activation_events = s.abs_obj.R_activation_events.get();
                     obj.model = s.abs_obj.model;
-                    if isempty(obj.model.EGFRt)
-                        obj.model.EGFRt = size(obj.EGFR_positions,2);
-                        obj.model.PTPRGt = size(obj.PTPRG_positions,2);
+                    if isempty(obj.model.Rt)
+                        obj.model.Rt = size(obj.R_positions,2);
+                        obj.model.P_dnf_t = size(obj.P_dnf_positions,2);
                     end
                     obj.time_steps = s.abs_obj.model.time_steps;
                     obj.square_size = s.abs_obj.model.square_size;
                 else
-                    obj.EGFR_states = cat(1,obj.EGFR_states,s.abs_obj.EGFR_states);
-                    obj.PTPRG_states = cat(1,obj.PTPRG_states,s.abs_obj.PTPRG_states);
-                    if isempty(s.abs_obj.EGFR_positions)
+                    obj.R_states = cat(1,obj.R_states,s.abs_obj.R_states);
+                    obj.P_dnf_states = cat(1,obj.P_dnf_states,s.abs_obj.P_dnf_states);
+                    if isempty(s.abs_obj.R_positions)
                         s.abs_obj.calculate_positions();
                     end
-                    obj.EGFR_positions = cat(1,obj.EGFR_positions,s.abs_obj.EGFR_positions);
-                    obj.PTPRG_positions = cat(1,obj.PTPRG_positions,s.abs_obj.PTPRG_positions);
-                    EGFRph = s.abs_obj.EGFR_phosphorylations.get();
-                    EGFRph(:, 1) = EGFRph(:, 1) + obj.time_steps;
-                    obj.EGFR_phosphorylations = cat(1,obj.EGFR_phosphorylations, EGFRph);
+                    obj.R_positions = cat(1,obj.R_positions,s.abs_obj.R_positions);
+                    obj.P_dnf_positions = cat(1,obj.P_dnf_positions,s.abs_obj.P_dnf_positions);
+                    R_act = s.abs_obj.R_activation_events.get();
+                    R_act(:, 1) = R_act(:, 1) + obj.time_steps;
+                    obj.R_activation_events = cat(1,obj.R_activation_events, R_act);
                     obj.time_steps = obj.time_steps + s.abs_obj.time_steps;
                 end
                 fprintf(repmat('\b', 1, length(str)));
-                str = sprintf('%d/%d',part,n_parts);
+                str = sprintf('%d/%d', part, obj.n_parts);
                 fprintf(str);
             end
             fprintf('...done\n');
             success = 1;
         end
         
+        function simulate(obj)
+            for part = 1:obj.n_parts
+                filename = sprintf(obj.filename_format, obj.ics_hl, obj.g1, obj.rep, part);
+                if exist(fullfile(obj.folder_data,filename),'file')
+                    s = load(fullfile(obj.folder_data,filename));
+                    abs_mini_obj = abs_mini(s.abs_obj); % for next part
+                    continue;
+                end
+                abs_obj = agent_based_simulation(part,obj.n_parts,'ics_hl',obj.ics_hl);
+                if part==1
+                    abs_obj.model.g1 = obj.g1./(abs_obj.model.interaction_radius^2*pi);
+                    obj.model = abs_obj.model;
+                else
+                    abs_obj.set_continuation_variables(abs_mini_obj);
+                end
+                abs_obj.simulation();
+                abs_animation.parsave(fullfile(obj.folder_data,filename), abs_obj);
+                abs_mini_obj = abs_mini(abs_obj);
+            end
+        end
+        
         function ret = plot_state(obj,t)
             ret = 0;
             if ~isvalid(obj.anim_fig); ret=1; return; end
-            obj.EGFR_plot.XData = obj.EGFR_positions(t,:,1);
-            if ~obj.plot_egfr_active
-                obj.EGFR_plot.XData(obj.EGFR_states(t,:,1)==1) = obj.EGFR_plot.XData(obj.EGFR_states(t,:,1)==1) + 5;
+            if obj.plot_R_active || obj.plot_R_inactive
+                % update positions
+                obj.R_plot.XData = obj.R_positions(t,:,1);
+                % exclude markers of active or inactive molecules
+                if ~obj.plot_R_active
+                    obj.R_plot.XData(obj.R_states(t,:,1)==0) = nan;
+                end
+                if ~obj.plot_R_inactive
+                    obj.R_plot.XData(obj.R_states(t,:,1)==1) = nan;
+                end
+                obj.R_plot.YData = obj.R_positions(t,:,2);
+                % update colors according to the current state
+                obj.R_plot.CData = single(squeeze(obj.R_states(t,:,:)))*obj.R_state_cols;
+                size_vec = obj.marker_size*ones(size(obj.R_plot.SizeData));
+                change_vec = zeros(size(obj.R_plot.SizeData));
+                % increase size when new activation event happens to R mol.
+                if t>1
+                    ind_start = find(obj.R_activation_events(:,1)>=max(t-obj.t_mem, 2), 1, 'first');
+                    ind_end = find(obj.R_activation_events(:,1)<=t, 1, 'last');
+                    changed = obj.R_activation_events(ind_start:ind_end,3);
+                    added_size = 300-(300/obj.t_mem)*(t-obj.R_activation_events(ind_start:ind_end,1));
+                    change_vec(changed) = added_size;
+                end
+                obj.R_plot.SizeData = size_vec + change_vec;
             end
-            if ~obj.plot_egfr_inactive
-                obj.EGFR_plot.XData(obj.EGFR_states(t,:,1)==0) = obj.EGFR_plot.XData(obj.EGFR_states(t,:,1)==0) + 5;
+            if obj.plot_P_dnf_active || obj.plot_P_dnf_inactive
+                obj.P_dnf_plot.XData = obj.P_dnf_positions(t,:,1);
+                if ~obj.plot_P_dnf_active
+                    obj.P_dnf_plot.XData(obj.P_dnf_states(t,:,1)==0) = nan;
+                end
+                if ~obj.plot_P_dnf_inactive
+                    obj.P_dnf_plot.XData(obj.P_dnf_states(t,:,1)==1) = nan;
+                end
+                obj.P_dnf_plot.YData = obj.P_dnf_positions(t,:,2);
+                obj.P_dnf_plot.CData = single(squeeze(obj.P_dnf_states(t,:,:)))*obj.P_dnf_state_cols;
             end
-            obj.EGFR_plot.YData = obj.EGFR_positions(t,:,2);
-            obj.EGFR_plot.CData = single(squeeze(obj.EGFR_states(t,:,:)))*obj.EGFR_state_cols;
-            size_vec = obj.marker_size*ones(size(obj.EGFR_plot.SizeData));
-            change_vec = zeros(size(obj.EGFR_plot.SizeData));
-            if t>1
-                ind_start = find(obj.EGFR_phosphorylations(:,1)>=max(t-obj.t_mem, 2), 1, 'first');
-                ind_end = find(obj.EGFR_phosphorylations(:,1)<=t, 1, 'last');
-                changed = obj.EGFR_phosphorylations(ind_start:ind_end,3);
-                added_size = 300-(300/obj.t_mem)*(t-obj.EGFR_phosphorylations(ind_start:ind_end,1));
-                change_vec(changed) = added_size;
-            end
-            obj.EGFR_plot.SizeData = size_vec + change_vec;
-            obj.PTPRG_plot.XData = obj.PTPRG_positions(t,:,1);
-            if ~obj.plot_rg_active
-                obj.PTPRG_plot.XData(obj.PTPRG_states(t,:,1)==1) = obj.PTPRG_plot.XData(obj.PTPRG_states(t,:,1)==1) + 5;
-            end
-            if ~obj.plot_rg_inactive
-                obj.PTPRG_plot.XData(obj.PTPRG_states(t,:,1)==0) = obj.PTPRG_plot.XData(obj.PTPRG_states(t,:,1)==0) + 5;
-            end
-            obj.PTPRG_plot.YData = obj.PTPRG_positions(t,:,2);
-            obj.PTPRG_plot.CData = single(squeeze(obj.PTPRG_states(t,:,:)))*obj.PTPRG_state_cols;
             title(obj.anim_ax, sprintf('t=%.3fs', (t-1)*obj.model.delta_t));
-            if isvalid(obj.time_fig)
+            if isvalid(obj.time_fig) % update dashed line
                 set(obj.time_ax_time_stamp,'XData',[(t-1)*obj.model.delta_t,(t-1)*obj.model.delta_t],'YData',[0,1]);
             end
             if ~isempty(obj.conc_ratio_fig)
@@ -164,57 +223,64 @@ classdef abs_animation < handle
             end
         end
         
-        function ret = plot_state_double_size(obj,t)
-            ret = 0;
-            if ~isvalid(obj.anim_fig); ret=1; return; end
-            obj.EGFR_plot.XData = [obj.EGFR_positions(t,:,1),obj.EGFR_positions(t,:,1),obj.square_size+obj.EGFR_positions(t,:,1),obj.square_size+obj.EGFR_positions(t,:,1)];
-            obj.EGFR_plot.YData = [obj.EGFR_positions(t,:,2),obj.square_size+obj.EGFR_positions(t,:,2),obj.EGFR_positions(t,:,2),obj.square_size+obj.EGFR_positions(t,:,2)];
-            obj.EGFR_plot.CData = [squeeze(obj.EGFR_states(t,:,:));squeeze(obj.EGFR_states(t,:,:));squeeze(obj.EGFR_states(t,:,:));squeeze(obj.EGFR_states(t,:,:))]*obj.EGFR_state_cols;
-            size_vec = obj.marker_size*ones(size(obj.EGFR_positions,2),1);
-            change_vec = zeros(size(obj.EGFR_positions,2),1);
-            if t>1
-                ind_start = find(obj.EGFR_phosphorylations(:,1)==max(t-obj.t_mem, 2), 1, 'first');
-                ind_end = find(obj.EGFR_phosphorylations(:,1)==t, 1, 'last');
-                changed = obj.EGFR_phosphorylations(ind_start:ind_end,3);
-                added_size = 1000-(1000/obj.t_mem)*(t-obj.EGFR_phosphorylations(ind_start:ind_end,1));
-                change_vec(changed) = added_size;
-            end
-            obj.EGFR_plot.SizeData = [size_vec + change_vec;size_vec + change_vec;size_vec + change_vec;size_vec + change_vec];
-            obj.PTPRG_plot.XData = [obj.PTPRG_positions(t,:,1),obj.PTPRG_positions(t,:,1),obj.square_size+obj.PTPRG_positions(t,:,1),obj.square_size+obj.PTPRG_positions(t,:,1)];
-            obj.PTPRG_plot.YData = [obj.PTPRG_positions(t,:,2),obj.square_size+obj.PTPRG_positions(t,:,2),obj.PTPRG_positions(t,:,2),obj.square_size+obj.PTPRG_positions(t,:,2)];
-            obj.PTPRG_plot.CData = [squeeze(obj.PTPRG_states(t,:,:));squeeze(obj.PTPRG_states(t,:,:));squeeze(obj.PTPRG_states(t,:,:));squeeze(obj.PTPRG_states(t,:,:))]*obj.PTPRG_state_cols;
-            title(obj.anim_ax, sprintf('t=%.3fs', (t-1)*obj.model.delta_t));
-            if isvalid(obj.time_fig)
-                set(obj.time_ax_time_stamp,'XData',[(t-1)*obj.model.delta_t,(t-1)*obj.model.delta_t],'YData',[0,1]);
-            end
-        end
-        
         function init_animation(obj)
-            %obj.anim_fig = figure('visible','off'); hold on;
-            %obj.anim_fig = figure(); hold on;
-            obj.anim_fig = obj.time_fig;
-            %set(obj.anim_fig, 'OuterPosition', [400, 300, 750, 700]);
-            %obj.anim_ax = gca;
-            obj.anim_ax = subplot(1,2,1); hold on; 
-            %figure(obj.conc_ratio_fig);
-            %axes(obj.conc_ratio_ax);
-            ax_len = 0.5;
-            obj.anim_btn_pause_resume = uicontrol('Style', 'push', 'String', '||', 'Units', 'normal', 'Position', [0.1*ax_len 0.02 0.1*ax_len 0.05],'CallBack', @(source,event) pause_resume());
-            obj.paused = false;
-            obj.anim_slider = uicontrol('Style','slider','Units', 'normal', 'Position', [0.2*ax_len 0.02 0.8*ax_len 0.05],...
-                'Min',1,'Max',obj.time_steps,'Value',1,'SliderStep',[1/(obj.time_steps-1),0.001]);%1/(obj.time_steps-1)]);
-            obj.EGFR_plot = scatter(obj.EGFR_positions(1,:,1),obj.EGFR_positions(1,:,2),obj.marker_size*ones(size(obj.EGFR_positions,2),1),...
-                single(squeeze(obj.EGFR_states(1,:,:)))*obj.EGFR_state_cols,'filled','MarkerEdgeColor',[1,0,0],'MarkerFaceAlpha',0.8);
-            obj.PTPRG_plot = scatter(obj.PTPRG_positions(1,:,1),obj.PTPRG_positions(1,:,2),obj.marker_size*ones(size(obj.PTPRG_positions,2),1),...
-                single(squeeze(obj.PTPRG_states(1,:,:)))*obj.PTPRG_state_cols,'filled','s','MarkerEdgeColor',[0,0.5,0.8],'MarkerFaceAlpha',0.8);
-            addlistener(obj.anim_slider,'Value','PostSet',@(s,e) slide);
+            if ~ishandle(obj.time_fig)
+                obj.combined = false;
+            end
+            if obj.combined
+                obj.anim_fig = obj.time_fig;
+                obj.anim_ax = subplot(1,2,1,'Parent', obj.anim_fig); 
+            else
+                obj.anim_fig = figure('OuterPosition', [400, 300, 750, 700]);
+                obj.anim_ax = axes('Parent', obj.anim_fig);
+            end
             
-            axis equal;
-            xlim([0,obj.square_size]);
-            ylim([0,obj.square_size]);
-            set(gca,'xtick',[]);
-            set(gca,'ytick',[]);
-            box on;
+            hold(obj.anim_ax,'on');
+            if obj.combined
+                % length of slider+button
+                ax_len = 0.5;
+            else
+                ax_len = 0.9;
+            end
+            obj.anim_btn_pause_resume = uicontrol('Parent',obj.anim_fig,'Style', 'push', 'String', '||', 'Units', 'normal', 'Position', [0.1*ax_len 0.02 0.1*ax_len 0.05],'CallBack', @(source,event) pause_resume());
+            obj.paused = false;
+            obj.anim_slider = uicontrol('Parent',obj.anim_fig,'Style','slider','Units', 'normal', 'Position', [0.2*ax_len 0.02 0.8*ax_len 0.05],...
+                'Min',1,'Max',obj.time_steps,'Value',1,'SliderStep',[1/(obj.time_steps-1),0.001]);
+            
+            if obj.plot_conc_ratio_bkg
+                obj.plot_conc_ratio;
+            end
+            
+            if obj.plot_R_active || obj.plot_R_inactive
+                % if both are to be hidden do not generate plot
+                obj.R_plot = scatter(obj.anim_ax,obj.R_positions(1,:,1),obj.R_positions(1,:,2),obj.marker_size*ones(size(obj.R_positions,2),1),...
+                    single(squeeze(obj.R_states(1,:,:)))*obj.R_state_cols,'filled','MarkerEdgeColor',[1,0,0],'MarkerFaceAlpha',0.8);
+                if ~obj.plot_R_active
+                    obj.R_plot.XData(obj.R_states(1,:,1)==0) = nan;
+                end
+                if ~obj.plot_R_inactive
+                    obj.R_plot.XData(obj.R_states(1,:,1)==1) = nan;
+                end
+            end
+            if obj.plot_P_dnf_active || obj.plot_P_dnf_inactive
+                % if both are to be hidden do not generate plot
+                obj.P_dnf_plot = scatter(obj.anim_ax,obj.P_dnf_positions(1,:,1),obj.P_dnf_positions(1,:,2),obj.marker_size*ones(size(obj.P_dnf_positions,2),1),...
+                    single(squeeze(obj.P_dnf_states(1,:,:)))*obj.P_dnf_state_cols,'filled','s','MarkerEdgeColor',[0,0.5,0.8],'MarkerFaceAlpha',0.8);
+                if ~obj.plot_P_dnf_active
+                    obj.P_dnf_plot.XData(obj.P_dnf_states(1,:,1)==0) = nan;
+                end
+                if ~obj.plot_P_dnf_inactive
+                    obj.P_dnf_plot.XData(obj.P_dnf_states(1,:,1)==1) = nan;
+                end
+            end
+            addlistener(obj.anim_slider,'Value','PostSet',@(s,e) slide());
+            
+            axis(obj.anim_ax,'equal');
+            xlim(obj.anim_ax,[0,obj.square_size]);
+            ylim(obj.anim_ax,[0,obj.square_size]);
+            set(obj.anim_ax,'xtick',[]);
+            set(obj.anim_ax,'ytick',[]);
+            box(obj.anim_ax,'on');
             if isvalid(obj.time_fig)
                 figure(obj.time_fig);
                 set(obj.time_ax_time_stamp,'XData',[0,0]);
@@ -222,6 +288,7 @@ classdef abs_animation < handle
             drawnow;
             
             function pause_resume()
+                % button callback
                 if obj.paused
                     obj.paused = false;
                     obj.anim_btn_pause_resume.String = '||';
@@ -234,68 +301,18 @@ classdef abs_animation < handle
             end
             
             function slide()
+                % slider update
                 t = round(get(obj.anim_slider,'Value'));
                 obj.t_current = t;
                 obj.plot_state(t);
                 drawnow;
             end
         end
-        
-        function init_animation_double_size(obj)
-            obj.anim_fig = figure();hold on;
-            set(obj.anim_fig, 'OuterPosition', [220, 50, 1110, 1050]);
-            obj.anim_ax = gca;
-            %obj.anim_slider = uicontrol('Style','slider','Position',[50 10 500 10],'Min',1,'Max',obj.time_steps,'Value',1);
-            obj.anim_slider = uicontrol('Style','slider','Units', 'normal', 'Position', [0.1 0.02 0.8 0.05],...
-                'Min',1,'Max',obj.time_steps,'Value',1,'SliderStep',[obj.model.delta_t, obj.model.delta_t]);
-            addlistener(obj.anim_slider,'Value','PostSet',@(s,e) slide);
-            plot([obj.square_size,obj.square_size],[0,2*obj.square_size],'k--');
-            plot([0,2*obj.square_size],[obj.square_size,obj.square_size],'k--');
-            x = [obj.EGFR_positions(1,:,1),obj.EGFR_positions(1,:,1),obj.square_size+obj.EGFR_positions(1,:,1),obj.square_size+obj.EGFR_positions(1,:,1)];
-            y = [obj.EGFR_positions(1,:,2),obj.square_size+obj.EGFR_positions(1,:,2),obj.EGFR_positions(1,:,2),obj.square_size+obj.EGFR_positions(1,:,2)];
-            states = [squeeze(obj.EGFR_states(1,:,:));squeeze(obj.EGFR_states(1,:,:));squeeze(obj.EGFR_states(1,:,:));squeeze(obj.EGFR_states(1,:,:))];
-            obj.EGFR_plot = scatter(x, y, obj.marker_size*ones(size(x,2),1),...
-                states*obj.EGFR_state_cols,'filled','MarkerEdgeColor',[1,0,0],'MarkerFaceAlpha',0.6);
-            x = [obj.PTPRG_positions(1,:,1),obj.PTPRG_positions(1,:,1),obj.square_size+obj.PTPRG_positions(1,:,1),obj.square_size+obj.PTPRG_positions(1,:,1)];
-            y = [obj.PTPRG_positions(1,:,2),obj.square_size+obj.PTPRG_positions(1,:,2),obj.PTPRG_positions(1,:,2),obj.square_size+obj.PTPRG_positions(1,:,2)];
-            states = [squeeze(obj.PTPRG_states(1,:,:));squeeze(obj.PTPRG_states(1,:,:));squeeze(obj.PTPRG_states(1,:,:));squeeze(obj.PTPRG_states(1,:,:))];
-            obj.PTPRG_plot = scatter(x, y, obj.marker_size*ones(size(x,2),1),...
-                states*obj.PTPRG_state_cols,'filled','^','MarkerEdgeColor',[0,0.8,0.8],'MarkerFaceAlpha',0.3);
-            axis equal;
-            xlim([0,2*obj.square_size]);
-            ylim([0,2*obj.square_size]);
-            set(gca,'xtick',[]);
-            set(gca,'ytick',[]);
-            box on;
-            if isvalid(obj.time_fig)
-                figure(obj.time_fig);
-                obj.time_ax_time_stamp = plot([0,0],[0,1],'k--');
-            end
-            drawnow;
-            
-            function slide()
-                t = round(get(obj.anim_slider,'Value'));
-                obj.plot_state_double_size(t);
-                drawnow;
-            end
-        end
-        
+                
         function loop(obj, t_start)
             obj.t_current = t_start;
             br = false;
-            if obj.save_animation == 1
-                folder = fullfile('C:/Users/',getenv('USERNAME'),'/Documents/Python Images/PTPs/temp/animations/');
-                i = 1;
-                set(obj.time_fig, 'Color', 'w');
-                %set(obj.time_fig, 'visible', 'off');
-            elseif obj.save_animation == 2
-                %% Initialize video
-                myVideo = VideoWriter('myVideoFile'); %open video file
-                myVideo.FrameRate = 30;  %can adjust this, 5 - 10 works well for me
-                myVideo.Quality = 100;
-                open(myVideo);
-            end
-            
+            [i, video] = obj.init_save_animation();            
             while true
                 if obj.t_current>obj.time_steps; break; end
                 if obj.t_current>obj.t_stop; break; end
@@ -304,62 +321,89 @@ classdef abs_animation < handle
                     break; 
                 end
                 if isvalid(obj.anim_slider)
+                    % main figure update
                     set(obj.anim_slider,'Value',obj.t_current); 
                 else % if figure is closed
                     br = true;
                     break
                 end
-                obj.t_current = obj.t_current+1;
-                if obj.save_animation == 1
-                    skipframes = 10;
-                    if mod(i,skipframes) == 0
-                        export_fig(obj.time_fig,fullfile(folder,strcat('img',sprintf('%05d', round(i/skipframes)),'.png')));
-                    end
-                    i = i+1;
-                elseif obj.save_animation == 2
-                    %frame = getframe(obj.anim_fig); %get frame
-                    frame = getframe(obj.conc_ratio_fig);
-                    writeVideo(myVideo, frame);
-                end
-                %pause(0.01);
+                obj.t_current = obj.t_current+1; % progress time
+                [i, video] = obj.update_save_animation(i, video);
             end
-            if obj.save_animation == 2; close(myVideo); end
+            obj.final_save_animation(video);
             if br == false
                 obj.paused = true;
                 obj.anim_btn_pause_resume.String = '>';
             end
         end
         
+        function [i, video] = init_save_animation(obj)
+            i = 0; video = [];
+            % create folder for animation if it doesn't exist
+            if obj.save_animation > 0 && ~exist(fullfile(obj.folder_data,'animations\'),'dir')
+                mkdir(fullfile(obj.folder_data,'animations\'));
+            end
+            if obj.save_animation == 1
+                i = 1; % track of file number
+                set(obj.time_fig, 'Color', 'w');
+            elseif obj.save_animation == 2
+                %% Initialize video
+                video = VideoWriter(fullfile(obj.folder_data,'animations\','animation')); %open video file
+                video.FrameRate = 30;  %can adjust this, 5 - 10 works well for me
+                video.Quality = 100;
+                open(video);
+            end
+        end
+        
+        function [i, video] = update_save_animation(obj, i, video)
+            if obj.save_animation == 1
+                skipframes = 10;
+                % save every 10th frame (for speed purposes)
+                if mod(i,skipframes) == 0
+                    saveas(obj.time_fig, fullfile(obj.folder_data,'animations\',strcat('img',sprintf('%05d', round(i/skipframes)),'.png')));
+                end
+                i = i+1;
+            elseif obj.save_animation == 2
+                frame = getframe(obj.anim_fig); %get frame
+                writeVideo(video, frame);
+            end
+        end
+        
+        function final_save_animation(obj, video)
+            if obj.save_animation == 2; close(video); end
+        end
+        
         function animation(obj)
             obj.init_animation();
-            obj.loop(11670);
+            obj.loop(obj.t_start);
         end
         
         function plot_temporal(obj)
             obj.time_fig = figure();
-            obj.time_ax = subplot(1,2,2);
-            %obj.time_ax = axes('Parent', obj.time_fig);
-            hold on; box on;
-            %set(obj.time_fig, 'OuterPosition', [1150, 300, 750, 700]);
+            if obj.combined
+                obj.time_ax = subplot(1,2,2,'Parent',obj.time_fig);
+            else
+                obj.time_ax = axes('Parent',obj.time_fig);
+            end
+            hold(obj.time_ax,'on'); box(obj.time_ax,'on');
             set(obj.time_fig, 'OuterPosition', [163,170,1702,715]);
-            x = 0:obj.model.delta_t:(obj.model.time_steps-1)*obj.model.delta_t;
-            xlim(obj.time_ax,[min(x),max(x)]);
-            ylim(obj.time_ax,[0,1]);
-            xlabel('Time (s)');
-            ylabel('R_a');
+            x = 0:obj.model.delta_t:(obj.time_steps-1)*obj.model.delta_t;
+            xlim(obj.time_ax, [min(x),max(x)]);
+            ylim(obj.time_ax, [0,1]);
+            xlabel(obj.time_ax, 'Time (s)');
+            ylabel(obj.time_ax, 'R_a');
             set(obj.time_ax,'fontsize',20);
-            h1 = plot(obj.time_ax, x, squeeze(sum(obj.EGFR_states(:,:,2),2))./obj.model.EGFRt);
-            set(h1, {'color'}, num2cell(obj.EGFR_state_cols(2,:),2));
-            h2 = plot(obj.time_ax, x, squeeze(sum(obj.PTPRG_states(:,:,2),2))./obj.model.PTPRGt);
-            set(h2, {'color'}, num2cell(obj.PTPRG_state_cols(2,:),2));
-%             h3 = plot(obj.time_ax, x,(1-obj.model.k1/(obj.model.k1+obj.model.k2))*ones(size(x)),'--');
-%             set(h3, {'color'}, num2cell(obj.PTPRG_state_cols(1,:),2));
-%             h4 = plot(obj.time_ax, x,(obj.model.k1/(obj.model.k1+obj.model.k2))*ones(size(x)),'--');
-%             set(h4, {'color'}, num2cell(obj.PTPRG_state_cols(2,:),2));
+            h1 = plot(obj.time_ax, x, squeeze(sum(obj.R_states(:,:,2),2))./obj.model.Rt);
+            set(h1, {'color'}, num2cell(obj.R_state_cols(2,:),2));
+            set(h1, 'HitTest', 'off'); % so that it does not intercept change_time_stamp()
+            h2 = plot(obj.time_ax, x, squeeze(sum(obj.P_dnf_states(:,:,2),2))./obj.model.P_dnf_t);
+            set(h2, {'color'}, num2cell(obj.P_dnf_state_cols(2,:),2));
+            set(h2, 'HitTest', 'off');
             obj.time_ax_time_stamp = plot(obj.time_ax,[0,0],[0,1],'k--');
             set(obj.time_ax,'ButtonDownFcn',@(e,s) change_time_stamp());
             
             function change_time_stamp()
+                % axes click callback - update time
                 pt = get(obj.time_ax,'CurrentPoint');
                 t = round(pt(1,1)/obj.model.delta_t);
                 if isvalid(obj.anim_slider)
@@ -374,134 +418,54 @@ classdef abs_animation < handle
             end
         end
         
-        function frac_div = calc_frac_div(obj)
-            time_average = 100;
-            n_bins = 12;
-            edges_bins = linspace(0,5,n_bins+1);
-            frac_div = zeros(obj.time_steps,1);
-            Ehh = zeros(obj.time_steps,n_bins*n_bins);
-            Phh = zeros(obj.time_steps,n_bins*n_bins);
-            parfor t=1:obj.time_steps
-                [Eh,~,~,binx,biny] = histcounts2(squeeze(median(obj.EGFR_positions(max(t-time_average+1,1):t,:,1),1)),squeeze(median(obj.EGFR_positions(max(t-time_average+1,1):t,:,2),1)),edges_bins, edges_bins);
-                Ph = histcounts2(squeeze(median(obj.PTPRG_positions(max(t-time_average+1,1):t,:,1),1)),squeeze(median(obj.PTPRG_positions(max(t-time_average+1,1):t,:,2),1)),edges_bins, edges_bins);
-                ratio = Ph./Eh;
-                ratio_log = log2(ratio)';
-                frac_div(t) = sum(ratio_log(:)<log2(obj.model.PTPRGt/obj.model.EGFRt))/length(ratio_log(:));
-                Ehh(t,:) = Eh(:);
-                Phh(t,:) = Ph(:);
-            end
-            x = 0:obj.model.delta_t:(obj.time_steps-1)*obj.model.delta_t;
-            figure(); plot(x,frac_div);
-            xlim([min(x),max(x)]);
-            figure(); Eh_h = histogram(Ehh(:)); hold on;
-            Ph_h = histogram(Phh(:)); hold on;
-            Eu = mean(Ehh(:))
-            Es = std(Ehh(:))
-            Pu = mean(Phh(:))
-            Ps = std(Phh(:))
-            x = 0:.01:10;
-            y_E = exp(-0.5*(x-Eu).^2./Es^2);
-            y_E = max(Eh_h.BinCounts)/max(y_E).*y_E;
-            y_P = exp(-0.5*(x-Pu).^2./Ps^2);
-            y_P = max(Ph_h.BinCounts)/max(y_P).*y_P;
-            plot(x,y_E);
-            plot(x,y_P);
-            figure(); pe_h = histogram(pe(:)); hold on;
-            figure(); plot(x,y_P./y_E);
-        end
-        
-        function plot_dist_distr(obj)
-            epi = find(obj.EGFR_phosphorylations(:,2)>=0);
-            dists = zeros(length(epi),1);
-            EGFRp = obj.EGFR_phosphorylations(epi,:);
-            EGFRpos = obj.EGFR_positions;
-            parfor i=1:length(epi)
-                t = EGFRp(i,1);
-                i1 = EGFRp(i,2);
-                i2 = EGFRp(i,3);
-                dists(i) = sqrt(sum((EGFRpos(t,i1,:)-EGFRpos(t,i2,:)).^2));
-            end
-            figure; histogram(dists);
-        end
-        
         function plot_conc_ratio(obj)
+            % plot as background the local P_dnf_t/R_t ratio (R0)
             time_average = 30;
             n_bins = 12;
             edges_bins = linspace(0,obj.square_size,n_bins+1);
-            [Eh,~,~,binx,biny] = histcounts2(squeeze(median(obj.EGFR_positions(max(obj.t_current-time_average+1,1):obj.t_current,:,1),1)),squeeze(median(obj.EGFR_positions(max(obj.t_current-time_average+1,1):obj.t_current,:,2),1)),edges_bins, edges_bins);
-            Ph = histcounts2(squeeze(median(obj.PTPRG_positions(max(obj.t_current-time_average+1,1):obj.t_current,:,1),1)),squeeze(median(obj.PTPRG_positions(max(obj.t_current-time_average+1,1):obj.t_current,:,2),1)),edges_bins, edges_bins);
-            ratio = obj.model.g1*(obj.model.interaction_radius^2*pi)*(Ph./Eh)/(obj.model.PTPRGt/obj.model.EGFRt);
-            ratio_log = ratio';%log2(ratio)';
-            ratio_log(n_bins+1,n_bins+1) = 0;
-            if obj.plot_bif
-                inxs = sub2ind(size(ratio),binx,biny);
-                Es = zeros(n_bins*n_bins,1);
-                for i=1:n_bins*n_bins
-                    Es(i) = median(sum(obj.EGFR_states(max(obj.t_current-time_average,1):obj.t_current,inxs==i,2),2))/length(find(inxs==i));
-                end
-            end
+            Rh = histcounts2(squeeze(median(obj.R_positions(max(obj.t_current-time_average+1,1):obj.t_current,:,1),1)),squeeze(median(obj.R_positions(max(obj.t_current-time_average+1,1):obj.t_current,:,2),1)),edges_bins, edges_bins);
+            Ph = histcounts2(squeeze(median(obj.P_dnf_positions(max(obj.t_current-time_average+1,1):obj.t_current,:,1),1)),squeeze(median(obj.P_dnf_positions(max(obj.t_current-time_average+1,1):obj.t_current,:,2),1)),edges_bins, edges_bins);
+            % calculate local ratio, and compare to main figure for SN points
+            ratio = obj.model.g1*(obj.model.interaction_radius^2*pi)*(Ph./Rh)/(obj.model.P_dnf_t/obj.model.Rt);
+            ratio = ratio';
+            ratio(n_bins+1,n_bins+1) = 0;
             if isempty(obj.conc_ratio_fig) || ~isvalid(obj.conc_ratio_fig)
+                obj.conc_ratio_fig = obj.anim_fig;
+                obj.conc_ratio_ax = obj.anim_ax;
+                hold(obj.conc_ratio_ax, 'on');
                 [X,Y] = meshgrid(edges_bins, edges_bins);
-                obj.conc_ratio_fig = obj.time_fig; %figure(); 
-                figure(obj.conc_ratio_fig);
-                %obj.conc_ratio_ax = axes('Parent', obj.conc_ratio_fig );
-                obj.conc_ratio_ax = subplot(1,2,1);
-                hold on; 
-                set(gca,'xtick',[]); set(gca,'ytick',[]);
-                %set(obj.conc_ratio_fig, 'OuterPosition', [1900, 300, 750, 700]);
-                obj.conc_ratio_p = pcolor(X,Y,ratio_log);
+                set(obj.conc_ratio_ax, 'xtick',[]); set(obj.conc_ratio_ax, 'ytick', []);
+                % color the plot with local ratios
+                obj.conc_ratio_p = pcolor(obj.conc_ratio_ax, X, Y, ratio);
                 set(obj.conc_ratio_p, 'EdgeColor', 'none');
                 set(obj.conc_ratio_p, 'facealpha', 0.7);
-                box on;
-                rgb = [ ...
-                    94    79   162
-                    50   136   189
-                    102   194   165
-                    171   221   164
-                    230   245   152
-                    255   255   191
-                    254   224   139
-                    253   174    97
-                    244   109    67
-                    213    62    79
-                    158     1    66  ] / 255;
-                colormap(flipud(rgb));
-                %caxis([0.5344, 0.66]);
-                %caxis([4.3, 5.0]);
-                caxis([3.8, 4.8]);
-                c = colorbar('FontSize',20);
+                box(obj.conc_ratio_ax, 'on');
+                colormap(obj.conc_ratio_ax, flipud(plotting().rgb));
+                % normalize to SN-points
+                caxis(obj.conc_ratio_ax, [3.8, 4.8]);
+                c = colorbar(obj.conc_ratio_ax, 'FontSize',20);
                 c.Label.FontSize = 20;
                 c.Label.Interpreter = 'latex';
                 c.Label.String = 'local $$\tilde{\gamma}_{DNF}P_{DNF,T}/R_T\propto 1/R_0$$';
-                
-                if obj.plot_bif
-                    obj.conc_ratio_bif_fig = figure(); 
-                    obj.conc_ratio_bif_ax = axes('Parent', obj.conc_ratio_bif_fig);
-                    obj.conc_ratio_bif_sc = scatter(obj.conc_ratio_bif_ax, ratio(:), Es);
-                    xlim([0,obj.square_size]); ylim([0,1]);
-                end
             else
-                obj.conc_ratio_p.CData = ratio_log;
-                if obj.plot_bif
-                    obj.conc_ratio_bif_sc.XData = ratio(:);
-                    obj.conc_ratio_bif_sc.YData = Es;
-                end
+                obj.conc_ratio_p.CData = ratio;
             end
             drawnow;
         end
         
-        function plot_all(obj, varargin)
-            p = inputParser;
-            addOptional(p,'plot_rg',false);
-            addOptional(p,'plot_conc_ratio',false);
-            parse(p,varargin{:});
-            close all
+        function plot_all(obj)
             obj.t_current = 1;
+            obj.combined = true;
+            % combine temporal plot with single-molecule animation
             obj.plot_temporal;
-            if obj.plot_conc_ratio_bkg
-                obj.plot_conc_ratio;
-            end
             obj.animation;
+        end
+    end
+    
+    methods (Static)        
+        function parsave(fname, abs_obj) 
+            % for saving data while in parallel mode
+            save(fname, 'abs_obj');
         end
     end
 end

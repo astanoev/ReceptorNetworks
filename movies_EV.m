@@ -7,13 +7,13 @@ classdef movies_EV
     methods
         function obj = movies_EV()
             obj.movie_EV1();
-%             obj.movie_EV2();
-%             obj.movie_EV3();
-%             obj.movie_EV4();
-%             obj.movie_EV5();
+            obj.movie_EV2();
+            obj.movie_EV3();
+            obj.movie_EV4();
+            obj.movie_EV5();
         end
         
-        function movie_EV1(obj)
+        function movie_EV1(obj) %#ok<*MANU>
             model = models.simple_dnf_model;
             mpe = experiments.multi_pulse_experiment(1);
             ms = model_simulation(model, mpe);
@@ -22,32 +22,28 @@ classdef movies_EV
         end
         
         function movie_EV2(obj)
-            obj.ics_hl = 1;
-            obj.g1 = 4.55;
-            rep = 7;
-            n_parts = 1;
+            absa = abs_animation('ics_hl',1,'g1',4.55,'rep',7,'n_parts',1);
+            absa.t_start = 56810;
+            absa.plot_all();
         end
         
         function movie_EV3(obj)
-            obj.ics_hl = 1;
-            obj.g1 = 4.95;
-            rep = 7;
-            n_parts = 1;
+            absa = abs_animation('ics_hl',1,'g1',4.95,'rep',7,'n_parts',1);
+            absa.t_start = 76190;
+            absa.plot_all();
         end
         
         function movie_EV4(obj)
-            obj.ics_hl = 1;
-            obj.g1 = 4.95;
-            rep = 7;
-            n_parts = 1;
-            plot_conc_ratio_bkg = true;
+            absa = abs_animation('ics_hl',1,'g1',4.95,'rep',7,'n_parts',1);
+            absa.t_start = 76190;
+            absa.plot_conc_ratio_bkg = true;
+            absa.plot_all();
         end
         
         function movie_EV5(obj)
-            obj.ics_hl = 1;
-            obj.g1 = 6;
-            rep = 7;
-            n_parts = 1;
+            absa = abs_animation('ics_hl',1,'g1',6,'rep',7,'n_parts',1);
+            absa.t_start = 11670;
+            absa.plot_all();
         end
         
         function finish_plot_ax(obj, ax, xlab, ylab, xlim, ylim, regime)

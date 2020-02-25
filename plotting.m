@@ -1,6 +1,18 @@
 classdef plotting
     properties
         savefig = 0;
+        rgb = [ ...
+                94    79   162
+                50   136   189
+                102   194   165
+                171   221   164
+                230   245   152
+                255   255   191
+                254   224   139
+                253   174    97
+                244   109    67
+                213    62    79
+                158     1    66  ] / 255;
     end
     
     methods
@@ -30,7 +42,7 @@ classdef plotting
             end
         end
         
-        function plot_state_space(obj, ax, dAB, q, x_lim, y_lim)
+        function plot_state_space(obj, ax, dAB, q, x_lim, y_lim) %#ok<INUSL>
             mags = log(dAB);
             currentColormap = hsv;
             currentColormap = flipud(currentColormap);
@@ -51,7 +63,7 @@ classdef plotting
             box(ax,'on');
         end
         
-        function save_figure(obj, filename, fig)
+        function save_figure(obj, filename, fig) %#ok<INUSL>
             dt = datetime('now','TimeZone','America/New_York');
             date = datestr(dt,'ddmmyyyy');
             folder = fullfile('C:/Users/',getenv('USERNAME'),'/Dropbox/Projects/PTP-2 project/Paper/Figures/Fig3/',date,'/');
