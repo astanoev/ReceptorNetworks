@@ -23,26 +23,26 @@ classdef movies_EV
         
         function movie_EV2(obj)
             absa = abs_animation('ics_hl',1,'g1',4.55,'rep',7,'n_parts',1);
-            absa.t_start = 56810;
+            if ~absa.newly_generated; absa.t_start = 56810; end
             absa.plot_all();
         end
         
         function movie_EV3(obj)
             absa = abs_animation('ics_hl',1,'g1',4.95,'rep',7,'n_parts',1);
-            absa.t_start = 76190;
+            if ~absa.newly_generated; absa.t_start = 76190; end
             absa.plot_all();
         end
         
         function movie_EV4(obj)
             absa = abs_animation('ics_hl',1,'g1',4.95,'rep',7,'n_parts',1);
-            absa.t_start = 76190;
+            if ~absa.newly_generated; absa.t_start = 76190; end
             absa.plot_conc_ratio_bkg = true;
             absa.plot_all();
         end
         
         function movie_EV5(obj)
             absa = abs_animation('ics_hl',1,'g1',6,'rep',7,'n_parts',1);
-            absa.t_start = 11670;
+            if ~absa.newly_generated; absa.t_start = 11670; end
             absa.plot_all();
         end
         

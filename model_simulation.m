@@ -89,7 +89,12 @@ classdef model_simulation < handle
                 if isempty(jj); jj = length(obj.input_vec)-i; end
                 j = i + jj;
                 n_patches = n_patches +1;
-                p(n_patches) = patch(ax, obj.experiment.time_min([i,i,j,j]),y1,'y','FaceColor',[221,187,24]./255,'EdgeColor','none','FaceAlpha',39/255); %#ok<AGROW>
+                try
+                    p(n_patches) = patch(ax, obj.experiment.time_min([i,i,j,j]),y1,'y','FaceColor',[221,187,24]./255,'EdgeColor','none','FaceAlpha',39/255); %#ok<AGROW>
+                catch
+                    axes(ax); %#ok<LAXES>
+                    p(n_patches) = patch(obj.experiment.time_min([i,i,j,j]),y1,'y','FaceColor',[221,187,24]./255,'EdgeColor','none','FaceAlpha',39/255); %#ok<AGROW>
+                end
             end
             % set the patches in the background (front of ui children array)
             set(ax,'children',circshift(get(ax,'children'),-n_patches));
@@ -184,7 +189,12 @@ classdef model_simulation < handle
             p_LRa = plot(ax2, obj.time, LRa,'LineWidth',2.5,'Color',[0.75,0.75,0.75]);
             set(p_LRa,'HitTest','off');
             %trajectory_state_space = animatedline(ax1,'LineWidth',2,'Color',obj.model.traj_cols(1,:));
-            time_profile = animatedline(ax2,'LineWidth',2.5,'Color',traj_color);
+            try
+                time_profile = animatedline(ax2,'LineWidth',2.5,'Color',traj_color);
+            catch % for older versions
+                axes(ax2);
+                time_profile = animatedline('LineWidth',2.5,'Color',traj_color);
+            end
             set(time_profile,'HitTest','off');
             
             p_nc = [];
@@ -233,6 +243,7 @@ classdef model_simulation < handle
                 end
             end
             drawnow;
+            waitfor(fig);
             
             function change_time_stamp()
                 pt = get(ax2,'CurrentPoint');

@@ -8,11 +8,12 @@ classdef abs_animation < handle
         P_dnf_state_cols = [[223,223,253]./255;[104,108,249]./255];
         marker_size = 100;
         square_size = 3.5; % um - width and length
-        folder_data = 'data\agent_based_simulations';
+        folder_data = fullfile('data','agent_based_simulations');
         filename_format = 'agent_based_ics_hl=%d_g1=%g_rep=%d_part=%d.mat';
         t_mem = 50;
         % sa - 0-w/o saving, 1-save as separate pngs, 2-save directly into video
         save_animation = 0;
+        newly_generated = false;
         t_current;
         % animation starting frame (dashed line)
         t_start = 1;
@@ -72,6 +73,7 @@ classdef abs_animation < handle
                         disp('error loading - stopping program!');
                         return;
                     end
+                    obj.newly_generated = true;
                 end
             else
                 abs_obj = p.Results.abs_obj;
@@ -117,7 +119,7 @@ classdef abs_animation < handle
                             % random number generator that was used for the
                             % single-molecule positions
                             success = 0;
-                            fprintf('...threefry missing\n');
+                            fprintf('...threefry rng missing (introduced from Matlab R2018b)\n');
                             return;
                         end
                     end
@@ -156,9 +158,13 @@ classdef abs_animation < handle
             for part = 1:obj.n_parts
                 filename = sprintf(obj.filename_format, obj.ics_hl, obj.g1, obj.rep, part);
                 if exist(fullfile(obj.folder_data,filename),'file')
-                    s = load(fullfile(obj.folder_data,filename));
-                    abs_mini_obj = abs_mini(s.abs_obj); % for next part
-                    continue;
+                    try
+                        s = load(fullfile(obj.folder_data,filename));
+                        abs_mini_obj = abs_mini(s.abs_obj); % for next part
+                        continue;
+                    catch
+                        fprintf('replacing previous file..');
+                    end
                 end
                 abs_obj = agent_based_simulation(part,obj.n_parts,'ics_hl',obj.ics_hl);
                 if part==1
@@ -229,7 +235,7 @@ classdef abs_animation < handle
             end
             if obj.combined
                 obj.anim_fig = obj.time_fig;
-                obj.anim_ax = subplot(1,2,1,'Parent', obj.anim_fig); 
+                obj.anim_ax = subplot(1,2,1,'Parent', obj.anim_fig);
             else
                 obj.anim_fig = figure('OuterPosition', [400, 300, 750, 700]);
                 obj.anim_ax = axes('Parent', obj.anim_fig);
@@ -281,9 +287,15 @@ classdef abs_animation < handle
             set(obj.anim_ax,'xtick',[]);
             set(obj.anim_ax,'ytick',[]);
             box(obj.anim_ax,'on');
+            set(obj.anim_ax,'fontsize',15);
+            drawnow;
             if isvalid(obj.time_fig)
                 figure(obj.time_fig);
+                set(obj.time_fig,'paperpositionmode','auto');
                 set(obj.time_ax_time_stamp,'XData',[0,0]);
+                obj.realign_axes(obj.time_ax, obj.anim_ax); % resize time_ax upon figure size change
+                addlistener(obj.anim_ax, 'Position', 'PostSet', @(src,evn) obj.realign_axes(obj.time_ax, obj.anim_ax));
+                set(obj.time_fig, 'SizeChangedFcn',@(src,evn) obj.realign_axes(obj.time_ax, obj.anim_ax));
             end
             drawnow;
             
@@ -340,15 +352,15 @@ classdef abs_animation < handle
         function [i, video] = init_save_animation(obj)
             i = 0; video = [];
             % create folder for animation if it doesn't exist
-            if obj.save_animation > 0 && ~exist(fullfile(obj.folder_data,'animations\'),'dir')
-                mkdir(fullfile(obj.folder_data,'animations\'));
+            if obj.save_animation > 0 && ~exist(fullfile(obj.folder_data,'animations'),'dir')
+                mkdir(fullfile(obj.folder_data,'animations'));
             end
             if obj.save_animation == 1
                 i = 1; % track of file number
                 set(obj.time_fig, 'Color', 'w');
             elseif obj.save_animation == 2
                 %% Initialize video
-                video = VideoWriter(fullfile(obj.folder_data,'animations\','animation')); %open video file
+                video = VideoWriter(fullfile(obj.folder_data,'animations','animation')); %open video file
                 video.FrameRate = 30;  %can adjust this, 5 - 10 works well for me
                 video.Quality = 100;
                 open(video);
@@ -360,7 +372,7 @@ classdef abs_animation < handle
                 skipframes = 10;
                 % save every 10th frame (for speed purposes)
                 if mod(i,skipframes) == 0
-                    saveas(obj.time_fig, fullfile(obj.folder_data,'animations\',strcat('img',sprintf('%05d', round(i/skipframes)),'.png')));
+                    saveas(obj.time_fig, fullfile(obj.folder_data,'animations',strcat('img',sprintf('%05d', round(i/skipframes)),'.png')));
                 end
                 i = i+1;
             elseif obj.save_animation == 2
@@ -376,6 +388,7 @@ classdef abs_animation < handle
         function animation(obj)
             obj.init_animation();
             obj.loop(obj.t_start);
+            waitfor(obj.anim_fig);
         end
         
         function plot_temporal(obj)
@@ -416,6 +429,13 @@ classdef abs_animation < handle
                     set(obj.time_ax_time_stamp,'XData',[(t-1)*obj.model.delta_t,(t-1)*obj.model.delta_t],'YData',[0,1]);
                 end
             end
+        end
+        
+        function realign_axes(obj, ax2, ax1) %#ok<INUSL>
+            drawnow;
+            pos1 = external_tools.plotboxpos(ax1); 
+            pos2 = external_tools.plotboxpos(ax2); 
+            set(ax2,'Units', 'Normalized', 'Position',[pos2(1),pos1(2),pos2(3),pos1(4)]); drawnow;
         end
         
         function plot_conc_ratio(obj)
@@ -463,7 +483,7 @@ classdef abs_animation < handle
     end
     
     methods (Static)        
-        function parsave(fname, abs_obj) 
+        function parsave(fname, abs_obj)  %#ok<INUSD>
             % for saving data while in parallel mode
             save(fname, 'abs_obj');
         end

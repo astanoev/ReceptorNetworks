@@ -26,20 +26,36 @@ classdef plot_xpp
             sn1 = idx_unst(end);
             sn2 = idx_unst(1);
             lw = 3;
-            patch(ax,'Faces',1:4,'Vertices',[x(sn1),0;x(sn1),1;x(sn2),1;x(sn2),0],'EdgeColor','none','FaceColor',obj.colors.bistable,'FaceAlpha',.35);
+            try
+                patch(ax,'Faces',1:4,'Vertices',[x(sn1),0;x(sn1),1;x(sn2),1;x(sn2),0],'EdgeColor','none','FaceColor',obj.colors.bistable,'FaceAlpha',.35);
+            catch % for older version of matlab
+                axes(ax);
+                patch('Faces',1:4,'Vertices',[x(sn1),0;x(sn1),1;x(sn2),1;x(sn2),0],'EdgeColor','none','FaceColor',obj.colors.bistable,'FaceAlpha',.35);
+            end
             vtx = [x(sn2),0;x(sn2),1;x(sn2)+0.1*(5-x(sn2)),1;x(sn2)+0.2*(5-x(sn2)),1;5,1;5,0;x(sn2)+0.2*(5-x(sn2)),0;x(sn2)+0.1*(5-x(sn2)),0];
             cc = obj.colors.criticality;
             cm = obj.colors.monostable;
             col = [cc;cc;cc;cm;cm;cm;cm;cc];
-            patch(ax,'Faces',1:8,'Vertices',vtx,'EdgeColor','none','FaceVertexCData',col,'FaceColor','interp','FaceAlpha',.35);
+            try
+                patch(ax,'Faces',1:8,'Vertices',vtx,'EdgeColor','none','FaceVertexCData',col,'FaceColor','interp','FaceAlpha',.35);
+            catch
+                axes(ax);
+                patch('Faces',1:8,'Vertices',vtx,'EdgeColor','none','FaceVertexCData',col,'FaceColor','interp','FaceAlpha',.35);
+            end
             plot(ax, x(1:sn2), y(1:sn2),'k-','LineWidth',lw);
             plot(ax, x(sn2:sn1), y(sn2:sn1),'k--','LineWidth',lw);
             plot(ax, x(sn1:end), y(sn1:end),'k-','LineWidth',lw);
-            text(ax, x(sn1), 2*y(sn1),'SN_1','HorizontalAlignment','right','fontsize',20);
-            text(ax, x(sn2), y(sn2),'SN_2','fontsize',20);
+            try
+                text(ax, x(sn1), 2*y(sn1),'SN_1','HorizontalAlignment','right','fontsize',20);
+                text(ax, x(sn2), y(sn2),'SN_2','fontsize',20);
+            catch
+                axes(ax);
+                text(x(sn1), 2*y(sn1),'SN_1','HorizontalAlignment','right','fontsize',20);
+                text(x(sn2), y(sn2),'SN_2','fontsize',20);
+            end
         end
         
-        function plot_response_amplitude(obj, fig)
+        function plot_response_amplitude(obj, fig) %#ok<INUSL>
             folder = 'data';
             filename1 = 'bifurcation_over_gamma_dnf_with_LRa=0.15.dat';
             filename2 = 'bifurcation_over_gamma_dnf_with_LRa=0.dat';
@@ -82,7 +98,12 @@ classdef plot_xpp
             x = M(:,1); % gamma_dnf (prop to P_dnft/R_t)
             y = M(:,2); % LRa input
             % plot green bistable patch
-            patch(ax,'Faces',1:numel(x),'Vertices',[x,y],'EdgeColor','none','FaceColor',obj.colors.bistable,'FaceAlpha',.33);
+            try
+                patch(ax,'Faces',1:numel(x),'Vertices',[x,y],'EdgeColor','none','FaceColor',obj.colors.bistable,'FaceAlpha',.33);
+            catch
+                axes(ax);
+                patch('Faces',1:numel(x),'Vertices',[x,y],'EdgeColor','none','FaceColor',obj.colors.bistable,'FaceAlpha',.33);
+            end
             plot(ax, x, y,'-','LineWidth',3,'color',obj.colors.bistable);
             % plot parameter organization points (vertical lines) for regimes
             regimes = fields(obj.gamma_dnf);

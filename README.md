@@ -14,7 +14,7 @@ and for the previous version on
 Requirements
 -------------------------
 
-The code has been tested successfully with older versions of MATLAB (R2016a (9.0)) and with the latest version (R2019b (9.7)) on Windows.
+The code has been tested successfully with older versions of MATLAB (at least R2015b (8.6)) and with the latest version (R2019b (9.7)) on Windows and macOS.
 
 Using the framework
 ===================
@@ -62,3 +62,13 @@ To run a stochastic single-molecule simulation simply define an animation and pl
 absa = abs_animation('ics_hl',1,'g1',4.95); % ics_hl=1 for high Ra initial conditions; also set g1 parameter
 absa.plot_all();
 ```
+
+Each run simulates 2s - add more 'n_parts' if you wish to simulate for longer, rather than increasing the duration in the agent_based_simulation class:
+
+```matlab
+absa = abs_animation('ics_hl',1,'g1',4.95,'rep',2,'n_parts',2); % different repetition (rep=2); simulate 4s (2x2s)
+absa.plot_all();
+```
+
+Different repetitions with the same settings can be simulated as shown above. If the repetition exists already, it will be loaded instead.
+Simulations from the paper can only be loaded with versions of Matlab ≥ R2018b.

@@ -341,7 +341,7 @@ classdef quasi_potential_landscape
         function str = get_parameters_string(obj, Lt)
             str = 'quasi_potential_landscape';
             cl_model = class(obj.model); % get class handle
-            model_name = split(cl_model,'.');
+            model_name = strsplit(cl_model,'.');
             model_name = model_name{2};
             str = strcat(str,'_',model_name);
             cl_constr = str2func(cl_model); % get constructor handle

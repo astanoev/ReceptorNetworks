@@ -33,6 +33,7 @@ classdef figureEV1
             I = max(mpe.input); % get input amplitude from experiment
             model = models.exponential_decay_model();
             p = zeros(1,numel(obj.betas));
+            display_name = cell(numel(obj.betas),1);
             for j=1:numel(obj.betas)
                 model.par.beta = obj.betas(j);
                 model.set_Rt_ss(Ra_ss, I); % set to match the steady_state
@@ -42,54 +43,88 @@ classdef figureEV1
                 Ra = ms.state(strcmp(ms.model.labels,'Ra'),:);
                 exponent = floor(log10(model.par.beta));
                 basic = model.par.beta*10^(-exponent);
-                p(j) = plot(ax, time_min, Ra, '--', 'LineWidth', 3, 'Color', obj.colors(j,:), 'DisplayName', sprintf('$\\beta=%.1f \\times 10^{%d}$',basic,exponent));
+                display_name{j} = sprintf('\\beta=%.1f \\times 10^{%d}',basic,exponent);
+                p(j) = plot(ax, time_min, Ra, '--', 'LineWidth', 3, 'Color', obj.colors(j,:), 'DisplayName', strcat('$',display_name{j},'$'));
             end
             
+            lastwarn(''); % Clear last warning message
             legend(ax, p, 'Interpreter','latex');
+            [warnMsg, ~] = lastwarn;
+            if ~isempty(warnMsg) % for older version of matlab
+                for j=1:numel(obj.betas)
+                    set(p(j),'DisplayName',display_name{j});
+                end
+                axes(ax);
+                legend(p);
+            end
             
             obj.finish_plot_ax(ax, 'Time (min)', 'Response');
             obj.finish_plot_fig(fig);
         end
         
         function figureEV1b(obj)
-            if ~exist('data\active_betas.mat','file')
+            if ~exist(fullfile('data','active_betas.mat'),'file')
                 % generate distributions if previously-generated files do
                 % not exist
                 obj.distributions_betas_stream_pulses();
             end
-            s = load('data\active_betas.mat');
+            s = load(fullfile('data','active_betas.mat'));
             fig = figure('Name','Figure EV1b');
             ax = axes('Parent', fig, 'Position', [0.18,0.18,0.75,0.75]);
             hold(ax,'on'); box(ax,'on');
             bin_size = 0.025; b_min = 0; b_max = 1;
+            h = zeros(1,numel(obj.betas));
+            display_name = cell(numel(obj.betas),1);
             for j = 1:numel(s.betas)
                 exponent = floor(log10(s.betas(j)));
                 basic = s.betas(j)*10^(-exponent);
-                histogram(ax, s.active_fraction(:,j), (b_min-bin_size/2):bin_size:(b_max+bin_size/2), 'DisplayName', sprintf('$\\beta=%.1f \\times 10^{%d}$',basic,exponent), 'FaceColor', obj.colors(j,:), 'FaceAlpha', 0.8);
+                display_name{j} = sprintf('\\beta=%.1f \\times 10^{%d}',basic,exponent);
+                h(j) = histogram(ax, s.active_fraction(:,j), (b_min-bin_size/2):bin_size:(b_max+bin_size/2), 'DisplayName', strcat('$',display_name{j},'$'), 'FaceColor', obj.colors(j,:), 'FaceAlpha', 0.8);
             end
-            legend(ax,'Interpreter','latex');
+            lastwarn(''); % Clear last warning message
+            legend(ax, h, 'Interpreter','latex');
+            [warnMsg, ~] = lastwarn;
+            if ~isempty(warnMsg) % for older version of matlab
+                for j=1:numel(obj.betas)
+                    set(h(j),'DisplayName',display_name{j});
+                end
+                axes(ax);
+                legend(h);
+            end
             obj.finish_plot_ax(ax, 'Duration of receptor activity (Fraction of time)', 'Frequency');
             obj.finish_plot_fig(fig);
         end
         
         function figureEV1c(obj)
-            if ~exist('data\active_betas.mat','file')
+            if ~exist(fullfile('data','active_betas.mat'),'file')
                 % generate distributions if previously-generated files do
                 % not exist
                 obj.distributions_betas_stream_pulses();
             end
-            s = load('data\active_betas.mat');
+            s = load(fullfile('data','active_betas.mat'));
             fig = figure('Name','Figure EV1c');
             ax = axes('Parent', fig, 'Position', [0.18,0.18,0.75,0.75]);
             hold(ax,'on'); box(ax,'on');
             bin_size = 1; b_min = 1; b_max = obj.n_pulses;
+            xlim([0,13]);
+            h = zeros(1,numel(obj.betas));
+            display_name = cell(numel(obj.betas),1);
             for j = 1:numel(s.betas)
                 exponent = floor(log10(s.betas(j)));
                 basic = s.betas(j)*10^(-exponent);
-                histogram(ax, s.active_patches(:,j), (b_min-bin_size/2):bin_size:(b_max+bin_size/2), 'DisplayName',sprintf('$\\beta=%.1f \\times 10^{%d}$',basic,exponent), 'FaceColor', obj.colors(j,:), 'FaceAlpha', 0.8);
+                display_name{j} = sprintf('\\beta=%.1f \\times 10^{%d}',basic,exponent);
+                h(j) = histogram(ax, s.active_patches(:,j), (b_min-bin_size/2):bin_size:(b_max+bin_size/2), 'DisplayName', strcat('$',display_name{j},'$'), 'FaceColor', obj.colors(j,:), 'FaceAlpha', 0.8);
             end
-            xlim([0,13]);
-            legend(ax,'Interpreter','latex');
+            lastwarn(''); % Clear last warning message
+            legend(ax, h, 'Interpreter','latex');
+            [warnMsg, ~] = lastwarn;
+            if ~isempty(warnMsg) % for older version of matlab
+                for j=1:numel(obj.betas)
+                    set(h(j),'DisplayName',display_name{j});
+                end
+                axes(ax);
+                legend(h);
+            end
             obj.finish_plot_ax(ax, {'Number of disjoint intervals','of receptor activity'}, 'Frequency');
             obj.finish_plot_fig(fig);
         end
@@ -132,7 +167,7 @@ classdef figureEV1
                 active_fraction(i,:) = active_fraction_i;  %#ok<PFOUS>
                 active_patches(i,:) = active_patches_i; %#ok<PFOUS>
             end
-            save('data\active_betas.mat','active_fraction','active_patches','betas');
+            save(fullfile('data','active_betas.mat'),'active_fraction','active_patches','betas');
         end
         
         function finish_plot_ax(obj, ax, xlab, ylab)

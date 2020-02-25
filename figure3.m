@@ -35,12 +35,12 @@ classdef figure3
         end
         
         function figure3b(obj)
-            if ~exist('data\active_fractions.mat','file')
+            if ~exist(fullfile('data','active_fractions.mat'),'file')
                 % generate distributions if previously-generated files do
                 % not exist
                 obj.distributions_stream_pulses();
             end
-            s = load('data\active_fractions.mat');
+            s = load(fullfile('data','active_fractions.mat'));
             fig = figure('Name','Figure 3B');
             ax = axes('Parent', fig, 'Position', [0.18,0.18,0.75,0.75]);
             hold(ax,'on'); box(ax,'on');
@@ -55,12 +55,12 @@ classdef figure3
         end
         
         function figure3c(obj)
-            if ~exist('data\active_patches.mat','file')
+            if ~exist(fullfile('data','active_patches.mat'),'file')
                 % generate distributions if previously-generated files do
                 % not exist
                 obj.distributions_stream_pulses();
             end
-            s = load('data\active_patches.mat');
+            s = load(fullfile('data','active_patches.mat'));
             fig = figure('Name','Figure 3C');
             ax = axes('Parent', fig, 'Position', [0.18,0.18,0.75,0.75]);
             hold(ax,'on'); box(ax,'on');
@@ -184,8 +184,8 @@ classdef figure3
                 ms.simulate();
                 [active_fraction_bst(i), active_patches_bst(i)] = ms.calc_active_fraction();
             end
-            save('data\active_fractions.mat','active_fraction_mem','active_fraction_revbst','active_fraction_mono','active_fraction_bst');
-            save('data\active_patches.mat','active_patches_mem','active_patches_revbst','active_patches_mono','active_patches_bst');
+            save(fullfile('data','active_fractions.mat'),'active_fraction_mem','active_fraction_revbst','active_fraction_mono','active_fraction_bst');
+            save(fullfile('data','active_patches.mat'),'active_patches_mem','active_patches_revbst','active_patches_mono','active_patches_bst');
         end
         
         function finish_plot_ax(obj, ax, xlab, ylab)
